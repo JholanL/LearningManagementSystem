@@ -284,7 +284,7 @@ const scenarios = [
         key: 'opening',
         customerLine: "Hello? I just got my bill and there's an extra P850 charge I don't recognize! What is this?",
         options: [
-          { text: "Thank you for calling Lumina Telecom, this is your agent. I'm sorry about the unexpected charge, I'll look into it right away. May I have your account number so I can verify your account?", score: 10, feedback: 'Excellent: complete greeting, empathy, and you moved straight to verification.', nextStep: 'verify' },
+          { text: "Thank you for calling Lumina Telecom, this is your agent. I'm sorry about the unexpected charge, I'll look into it right away. May I have your account number so I can verify your account?", score: 10, feedback: 'Excellent: complete greeting, empathy, and you moved straight to verification.', nextStep: 'verify', keywords: ['thank you', 'lumina', 'sorry', 'account number', 'verify'] },
           { text: "What's your account number?", score: 3, feedback: 'Too abrupt. You skipped the greeting and showed no empathy.', nextStep: 'verify' },
           { text: "Charges are usually correct, ma'am. Did you check your usage?", score: 0, feedback: 'Dismissive. Never assume the customer is wrong before checking.', nextStep: 'upset' },
         ],
@@ -293,7 +293,7 @@ const scenarios = [
         key: 'verify',
         customerLine: "It's 0917-555-0123. My name is Liza Cruz.",
         options: [
-          { text: 'Thank you, Ms. Cruz. For your security, may I also have your birthdate or your last payment amount?', score: 10, feedback: 'Correct 2-factor verification before disclosing details (Data Privacy Act compliant).', nextStep: 'explain' },
+          { text: 'Thank you, Ms. Cruz. For your security, may I also have your birthdate or your last payment amount?', score: 10, feedback: 'Correct 2-factor verification before disclosing details (Data Privacy Act compliant).', nextStep: 'explain', keywords: ['birthdate', 'last payment', 'security', 'verify'] },
           { text: 'Thanks! I can see the P850 is for a video streaming add-on.', score: 2, feedback: 'Compliance issue: you disclosed account details before completing verification.', nextStep: 'explain' },
           { text: '(Places the customer on hold without saying anything)', score: 3, feedback: 'Always ask permission and give a time estimate before placing a customer on hold.', nextStep: 'explain' },
         ],
@@ -302,7 +302,7 @@ const scenarios = [
         key: 'explain',
         customerLine: 'Okay... so what is this charge? I never subscribed to anything!',
         options: [
-          { text: "I understand how frustrating that is. I see a video streaming add-on was activated on the 3rd through a promo text reply. Did anyone else use your phone around that date?", score: 10, feedback: 'Clear, jargon-free explanation with good probing.', nextStep: 'resolve' },
+          { text: "I understand how frustrating that is. I see a video streaming add-on was activated on the 3rd through a promo text reply. Did anyone else use your phone around that date?", score: 10, feedback: 'Clear, jargon-free explanation with good probing.', nextStep: 'resolve', keywords: ['streaming', 'promo text', 'activated', 'understand'] },
           { text: 'It is a VAS charge, ma\'am. System-generated.', score: 3, feedback: 'Avoid jargon like "VAS". Explain in plain words.', nextStep: 'resolve' },
           { text: "You must have subscribed. There's nothing I can do.", score: 0, feedback: 'No ownership. This will escalate the call.', nextStep: 'upset' },
         ],
@@ -311,7 +311,7 @@ const scenarios = [
         key: 'upset',
         customerLine: "That's ridiculous! I want to talk to your supervisor right now!",
         options: [
-          { text: "I completely understand, and I'm sorry for the frustration. Before I transfer you, may I check what I can do right now? I may be able to resolve this for you.", score: 8, feedback: 'Good recovery: empathy + ownership before escalating.', nextStep: 'resolve' },
+          { text: "I completely understand, and I'm sorry for the frustration. Before I transfer you, may I check what I can do right now? I may be able to resolve this for you.", score: 8, feedback: 'Good recovery: empathy + ownership before escalating.', nextStep: 'resolve', keywords: ['understand', 'sorry', 'resolve', 'before i transfer'] },
           { text: 'Sure, please hold. (Transfers the call)', score: 3, feedback: 'Immediate transfer without trying to help. Missed chance to resolve.', nextStep: null },
           { text: "Ma'am, please calm down.", score: 0, feedback: 'Never tell a customer to calm down. The customer hung up.', nextStep: null },
         ],
@@ -320,7 +320,7 @@ const scenarios = [
         key: 'resolve',
         customerLine: 'My son might have replied to a promo text... Can you remove it?',
         options: [
-          { text: "Absolutely. I've deactivated the add-on, filed a one-time courtesy adjustment of P850 for your next bill, and added a VAS block so this won't happen again.", score: 10, feedback: 'Full resolution plus prevention. This is first-call resolution.', nextStep: 'closing' },
+          { text: "Absolutely. I've deactivated the add-on, filed a one-time courtesy adjustment of P850 for your next bill, and added a VAS block so this won't happen again.", score: 10, feedback: 'Full resolution plus prevention. This is first-call resolution.', nextStep: 'closing', keywords: ['deactivated', 'courtesy', 'adjustment', 'vas block', 'credit'] },
           { text: "I'll deactivate it, but I can't refund the charge.", score: 5, feedback: 'Partially resolved. You were allowed to give a courtesy adjustment.', nextStep: 'closing' },
           { text: "You'll need to visit a Lumina store for that.", score: 1, feedback: 'Unnecessary redirection. You could resolve this on the call.', nextStep: 'closing' },
         ],
@@ -329,7 +329,7 @@ const scenarios = [
         key: 'closing',
         customerLine: "Oh, that's great. No, that's all. Thank you!",
         options: [
-          { text: "You're welcome, Ms. Cruz! To recap: the add-on is removed and the P850 credit will show on your next bill. Thank you for calling Lumina Telecom, have a great day!", score: 10, feedback: 'Perfect closing: recap, thanks, and branded sign-off.', nextStep: null },
+          { text: "You're welcome, Ms. Cruz! To recap: the add-on is removed and the P850 credit will show on your next bill. Thank you for calling Lumina Telecom, have a great day!", score: 10, feedback: 'Perfect closing: recap, thanks, and branded sign-off.', nextStep: null, keywords: ['recap', 'credit', 'next bill', 'thank you', 'lumina'] },
           { text: 'Okay, bye.', score: 2, feedback: 'Weak closing. Always recap and thank the customer.', nextStep: null },
         ],
       },
@@ -349,7 +349,7 @@ const scenarios = [
         key: 'opening',
         customerLine: "This is the THIRD time I'm calling! My internet has been slow for three days and nobody has fixed it!",
         options: [
-          { text: "I'm really sorry you've had to call three times, Mr. Lim. That's not the experience you deserve. I'm going to take ownership of this today. May I verify your account first?", score: 10, feedback: 'Strong LEAP response: empathy, apology, and ownership.', nextStep: 'troubleshoot' },
+          { text: "I'm really sorry you've had to call three times, Mr. Lim. That's not the experience you deserve. I'm going to take ownership of this today. May I verify your account first?", score: 10, feedback: 'Strong LEAP response: empathy, apology, and ownership.', nextStep: 'troubleshoot', keywords: ['sorry', 'ownership', 'apologize', 'verify'] },
           { text: 'Sir, I need your account number first.', score: 2, feedback: 'Ignores the emotion. An irate caller needs acknowledgment first.', nextStep: 'troubleshoot' },
         ],
       },
@@ -357,7 +357,7 @@ const scenarios = [
         key: 'troubleshoot',
         customerLine: "Fine. Account is 8800-1234. I already restarted the modem like the last agent said!",
         options: [
-          { text: "Thank you, and I appreciate you trying that. I can see from your history that the restart didn't help, so I won't ask you to do it again. Let me run a line test from our end.", score: 10, feedback: 'You read the history and avoided repeating steps. Great.', nextStep: 'result' },
+          { text: "Thank you, and I appreciate you trying that. I can see from your history that the restart didn't help, so I won't ask you to do it again. Let me run a line test from our end.", score: 10, feedback: 'You read the history and avoided repeating steps. Great.', nextStep: 'result', keywords: ['line test', 'history', 'appreciate', 'restart'] },
           { text: 'Okay sir, please restart your modem again.', score: 1, feedback: 'Repeating a step that already failed frustrates the customer more.', nextStep: 'result' },
         ],
       },
@@ -365,7 +365,7 @@ const scenarios = [
         key: 'result',
         customerLine: 'So? What did you find?',
         options: [
-          { text: "The line test shows a signal issue outside your home, so a technician visit is needed. I've booked the earliest slot tomorrow 9AM-12NN and flagged it as a repeat issue. You'll get an SMS confirmation.", score: 10, feedback: 'Clear finding, concrete next step, and timeframe.', nextStep: 'closing' },
+          { text: "The line test shows a signal issue outside your home, so a technician visit is needed. I've booked the earliest slot tomorrow 9AM-12NN and flagged it as a repeat issue. You'll get an SMS confirmation.", score: 10, feedback: 'Clear finding, concrete next step, and timeframe.', nextStep: 'closing', keywords: ['line test', 'technician', 'signal', 'tomorrow', 'sms'] },
           { text: "There's an issue. Someone will contact you.", score: 3, feedback: 'Vague. Always give specific next steps and timeframes.', nextStep: 'closing' },
         ],
       },
@@ -373,7 +373,7 @@ const scenarios = [
         key: 'closing',
         customerLine: 'Alright. Hopefully this time it gets fixed.',
         options: [
-          { text: "I understand, Mr. Lim. I've added my notes so anyone you talk to will know the full history. Is there anything else I can help you with today?", score: 10, feedback: 'Reassuring close with ownership.', nextStep: null },
+          { text: "I understand, Mr. Lim. I've added my notes so anyone you talk to will know the full history. Is there anything else I can help you with today?", score: 10, feedback: 'Reassuring close with ownership.', nextStep: null, keywords: ['notes', 'history', 'anything else'] },
           { text: 'Thank you for calling.', score: 4, feedback: 'Too short for a repeat-caller. Reassure and offer further help.', nextStep: null },
         ],
       },
@@ -393,7 +393,7 @@ const scenarios = [
         key: 'opening',
         customerLine: "Hi! I keep running out of data on my 599 plan. What are my options?",
         options: [
-          { text: 'Happy to help! May I ask how many GB you usually use in a month so I can recommend the right plan?', score: 10, feedback: 'Great needs-based probing before recommending.', nextStep: null },
+          { text: 'Happy to help! May I ask how many GB you usually use in a month so I can recommend the right plan?', score: 10, feedback: 'Great needs-based probing before recommending.', nextStep: null, keywords: ['gb', 'usage', 'recommend', 'plan'] },
           { text: 'Get the 1499 plan, it is the best.', score: 3, feedback: 'Recommend based on needs, not on price.', nextStep: null },
         ],
       },
@@ -401,4 +401,123 @@ const scenarios = [
   },
 ];
 
-module.exports = { users, courses, scenarios };
+// Knowledge base articles (feature 2). relatedCourseCodes are mapped to ids in seed.js.
+const kbArticles = [
+  {
+    title: 'Lumina Postpaid Plans',
+    category: 'Product',
+    account: 'Lumina Telecom',
+    status: 'published',
+    tags: ['plans', 'postpaid', 'product'],
+    summary: 'The current LUMINA postpaid plans, inclusions, and when upgrades take effect.',
+    views: 240,
+    relatedCourseCodes: ['LTP-201'],
+    body: `LUMINA postpaid plans (current line-up):
+
+- LUMINA 599 — 20GB data, unli calls/texts to Lumina.
+- LUMINA 999 — 50GB data, unli all-net calls/texts.
+- LUMINA 1499 — 120GB data, unli all-net, plus a FREE 6-month streaming add-on.
+
+Key rules:
+- Plan upgrades take effect on the NEXT billing cycle, not immediately.
+- Downgrades require the current cycle to finish first.
+- Only LUMINA 1499 includes the streaming add-on; do not promise it on lower plans.`,
+  },
+  {
+    title: 'VAS and Unknown Charges',
+    category: 'Billing',
+    account: 'Lumina Telecom',
+    status: 'published',
+    tags: ['vas', 'billing', 'charges'],
+    summary: 'What VAS is, why "unknown charges" appear, and the one-time courtesy adjustment rule.',
+    views: 310,
+    relatedCourseCodes: ['LTP-201'],
+    body: `VAS (Value-Added Services) are paid subscriptions such as ringtones, games or video streaming add-ons.
+
+Why customers see "unknown" charges:
+- Replying to a promo text (even "YES" or "STOP") can activate a paid VAS.
+- Someone else using the phone may have subscribed.
+
+How to resolve:
+1. Verify the account holder first (Data Privacy Act).
+2. Explain the charge in plain words — avoid the term "VAS" with customers.
+3. Deactivate the add-on and add a VAS block.
+4. You may file ONE courtesy adjustment per account every 12 months.`,
+  },
+  {
+    title: 'Billing Cycle and Due Dates',
+    category: 'Billing',
+    account: 'Lumina Telecom',
+    status: 'published',
+    tags: ['billing', 'due date', 'cycle'],
+    summary: 'When bills generate, when they are due, and what happens after the due date.',
+    views: 120,
+    relatedCourseCodes: [],
+    body: `Billing timeline:
+
+- Bills GENERATE on the 1st of each month.
+- Bills are DUE on the 21st of the month.
+- A late payment fee applies after the due date.
+- Service may be temporarily suspended 15 days past due.
+
+Always confirm the customer's cycle before quoting a due date, as migrated accounts may differ.`,
+  },
+  {
+    title: 'Caller Verification Script',
+    category: 'Scripts',
+    account: 'Lumina Telecom',
+    status: 'published',
+    tags: ['verification', 'script', 'compliance'],
+    summary: 'The required 2-factor verification before disclosing any account details.',
+    views: 95,
+    relatedCourseCodes: ['DPA-103'],
+    body: `Before discussing ANY account details, verify the caller:
+
+"For your security, may I verify your identity first? May I have your account number, and either your registered birthdate or your last payment amount?"
+
+Rules (RA 10173 — Data Privacy Act):
+- Two matching identifiers are required.
+- If verification fails, you may only confirm the account EXISTS — never share balances, charges or personal data.
+- Never ask for the customer's password or OTP.`,
+  },
+  {
+    title: 'LEAP De-escalation Script',
+    category: 'Scripts',
+    account: 'Lumina Telecom',
+    status: 'published',
+    tags: ['leap', 'deescalation', 'script', 'irate'],
+    summary: 'The Listen-Empathize-Apologize-Problem-solve flow for irate callers.',
+    views: 180,
+    relatedCourseCodes: ['IRT-102'],
+    body: `LEAP is used with irate or upset customers:
+
+L — Listen: let them vent without interrupting.
+E — Empathize: "I understand how frustrating this must be."
+A — Apologize: "I'm sorry you've had to call about this again."
+P — Problem-solve: take ownership and state the concrete next step.
+
+Tips:
+- Keep a calm, slightly slower pace.
+- Never say "calm down".
+- Most anger is about the situation, not about you.`,
+  },
+  {
+    title: 'Slow Internet Troubleshooting',
+    category: 'Technical',
+    account: 'Lumina Telecom',
+    status: 'published',
+    tags: ['internet', 'troubleshooting', 'technical'],
+    summary: 'A step-by-step line-check flow before booking a technician visit.',
+    views: 150,
+    relatedCourseCodes: [],
+    body: `Slow internet troubleshooting flow:
+
+1. Check the customer's history first — do NOT repeat steps already done.
+2. Confirm which devices are affected and the usual speed.
+3. Run a line test from your end.
+4. If the test shows a signal issue outside the home, book a technician visit with a specific time window and flag repeat issues.
+5. Always give a concrete next step and timeframe, and send an SMS confirmation.`,
+  },
+];
+
+module.exports = { users, courses, scenarios, kbArticles };

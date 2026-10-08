@@ -5,6 +5,8 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { paginate, searchFilter } = require('../utils/query');
+const { audit } = require('../services/auditService');
+const { notify } = require('../services/notificationService');
 
 const FIELDS = ['name', 'account', 'description', 'trainer', 'courses', 'startDate', 'endDate', 'status'];
 
@@ -61,6 +63,7 @@ exports.createBatch = asyncHandler(async (req, res) => {
   const data = pick(req.body, FIELDS);
   await validateRefs(data);
   const batch = await Batch.create(data);
+  await audit(req, { action: 'batch.create', targetType: 'Batch', targetId: batch._id, targetLabel: batch.name });
   res.status(201).json({ success: true, message: 'Batch created.', data: batch });
 });
 
@@ -73,6 +76,7 @@ exports.updateBatch = asyncHandler(async (req, res) => {
   Object.assign(batch, data);
   if (batch.endDate < batch.startDate) throw new ApiError(422, 'End date must be on or after the start date');
   await batch.save();
+  await audit(req, { action: 'batch.update', targetType: 'Batch', targetId: batch._id, targetLabel: batch.name, metadata: { fields: Object.keys(data) } });
   res.json({ success: true, message: 'Batch updated.', data: batch });
 });
 
@@ -85,8 +89,20 @@ exports.setAgents = asyncHandler(async (req, res) => {
   const agents = await User.countDocuments({ _id: { $in: agentIds }, role: 'agent' });
   if (agents !== agentIds.length) throw new ApiError(400, 'All members must be existing agent accounts.');
 
+  // Who is NEW to this batch? (so only they get notified, not agents already in it)
+  const existing = (await User.find({ batch: batch._id }).select('_id')).map((u) => String(u._id));
+  const newlyAdded = agentIds.filter((id) => !existing.includes(id));
+
   await User.updateMany({ batch: batch._id, _id: { $nin: agentIds } }, { $set: { batch: null } });
   await User.updateMany({ _id: { $in: agentIds } }, { $set: { batch: batch._id } });
+
+  await audit(req, { action: 'batch.members', targetType: 'Batch', targetId: batch._id, targetLabel: batch.name, metadata: { total: agentIds.length, added: newlyAdded.length } });
+  await notify(newlyAdded, {
+    type: 'batch.assigned',
+    title: 'Added to a training batch',
+    message: `You were added to ${batch.name} (${batch.account}). Your courses are now available.`,
+    link: '/agent/courses',
+  });
   res.json({ success: true, message: `Batch now has ${agentIds.length} agent(s).` });
 });
 
@@ -95,6 +111,9 @@ exports.deleteBatch = asyncHandler(async (req, res) => {
   const batch = await Batch.findById(req.params.id);
   if (!batch) throw new ApiError(404, 'Batch not found');
   await User.updateMany({ batch: batch._id }, { $set: { batch: null } });
+  const label = batch.name;
+  const deletedId = batch._id;
   await batch.deleteOne();
+  await audit(req, { action: 'batch.delete', targetType: 'Batch', targetId: deletedId, targetLabel: label });
   res.json({ success: true, message: 'Batch deleted.' });
 });

@@ -59,6 +59,12 @@ app.use('/api/lessons', require('./routes/lessonRoutes'));
 app.use('/api/quizzes', require('./routes/quizRoutes'));
 app.use('/api/scenarios', require('./routes/scenarioRoutes'));
 app.use('/api/evaluations', require('./routes/evaluationRoutes'));
+app.use('/api/audit-logs', require('./routes/auditRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/kb', require('./routes/kbRoutes'));
+app.use('/api/analytics', require('./routes/analyticsRoutes'));
+app.use('/api/endorsements', require('./routes/endorsementRoutes'));
+app.use('/api/drill', require('./routes/drillRoutes'));
 app.use('/api', require('./routes/miscRoutes'));
 
 // ---------- Errors ----------

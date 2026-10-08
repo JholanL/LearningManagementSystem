@@ -3,6 +3,7 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { generateToken } = require('../utils/token');
+const { audit } = require('../services/auditService');
 
 // POST /api/auth/register  (public) - self-registration is always an AGENT account
 exports.register = asyncHandler(async (req, res) => {
@@ -20,7 +21,13 @@ exports.login = asyncHandler(async (req, res) => {
 
   // Same message for "no user" and "wrong password" so attackers can't discover valid emails
   const invalid = new ApiError(401, 'Invalid email or password.');
-  if (!user) throw invalid;
+  if (!user) {
+    // actor stays null for an unknown email; snapshot the attempted address (never the password)
+    await audit(req, { action: 'auth.login_failed', actorName: String(email || 'unknown'), metadata: { email: String(email || ''), reason: 'unknown_email' } });
+    throw invalid;
+  }
+
+  const actorSnapshot = { actor: user._id, actorName: `${user.firstName} ${user.lastName}`, actorRole: user.role };
 
   if (user.isLocked) {
     const minutes = Math.ceil((user.lockUntil - Date.now()) / 60000);
@@ -29,6 +36,11 @@ exports.login = asyncHandler(async (req, res) => {
 
   if (!(await user.comparePassword(password))) {
     await user.registerFailedLogin();
+    await audit(req, { ...actorSnapshot, action: 'auth.login_failed', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}`, metadata: { reason: 'bad_password' } });
+    // registerFailedLogin sets lockUntil on the 5th attempt -> record the lock too
+    if (user.isLocked) {
+      await audit(req, { ...actorSnapshot, action: 'auth.locked', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}` });
+    }
     throw invalid;
   }
 
@@ -36,6 +48,7 @@ exports.login = asyncHandler(async (req, res) => {
 
   await user.registerSuccessfulLogin();
   await user.populate('batch', 'name account');
+  await audit(req, { ...actorSnapshot, action: 'auth.login', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}` });
   res.json({ success: true, message: 'Logged in.', token: generateToken(user), user });
 });
 
@@ -64,11 +77,13 @@ exports.changePassword = asyncHandler(async (req, res) => {
   user.password = req.body.newPassword;
   user.tokenVersion += 1;
   await user.save();
+  await audit(req, { action: 'auth.password_changed', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}` });
   res.json({ success: true, message: 'Password changed.', token: generateToken(user) });
 });
 
 // POST /api/auth/logout  - invalidates every token issued to this user
 exports.logout = asyncHandler(async (req, res) => {
   await User.updateOne({ _id: req.user._id }, { $inc: { tokenVersion: 1 } });
+  await audit(req, { action: 'auth.logout', targetType: 'User', targetId: req.user._id, targetLabel: `${req.user.firstName} ${req.user.lastName}` });
   res.json({ success: true, message: 'Logged out.' });
 });

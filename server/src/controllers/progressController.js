@@ -45,7 +45,7 @@ exports.getBatchProgress = asyncHandler(async (req, res) => {
   }
 
   const courses = batch.courses.filter((c) => c.isPublished);
-  const agents = await User.find({ batch: batch._id, role: 'agent' }).select('firstName lastName employeeId').sort('lastName');
+  const agents = await User.find({ batch: batch._id, role: 'agent' }).select('firstName lastName employeeId productionStatus').sort('lastName');
   const matrix = await buildProgressMatrix(
     agents.map((a) => a._id),
     courses.map((c) => c._id)

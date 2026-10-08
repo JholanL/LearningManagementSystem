@@ -9,8 +9,11 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { paginate, searchFilter } = require('../utils/query');
+const User = require('../models/User');
 const { getAgentCourseIds, assertCanViewCourse, assertCanEditCourse } = require('../services/accessService');
 const { buildProgressMatrix } = require('../services/progressService');
+const { audit } = require('../services/auditService');
+const { notify } = require('../services/notificationService');
 
 const FIELDS = ['code', 'title', 'description', 'category', 'level', 'passingScore', 'maxAttempts', 'estimatedHours', 'thumbnailUrl'];
 
@@ -112,6 +115,7 @@ exports.getCourse = asyncHandler(async (req, res) => {
 // POST /api/courses   (trainer, admin)
 exports.createCourse = asyncHandler(async (req, res) => {
   const course = await Course.create({ ...pick(req.body, FIELDS), createdBy: req.user._id });
+  await audit(req, { action: 'course.create', targetType: 'Course', targetId: course._id, targetLabel: `${course.code} ${course.title}` });
   res.status(201).json({ success: true, message: 'Course created.', data: course });
 });
 
@@ -120,8 +124,10 @@ exports.updateCourse = asyncHandler(async (req, res) => {
   const course = await Course.findById(req.params.id);
   if (!course) throw new ApiError(404, 'Course not found');
   assertCanEditCourse(req.user, course);
-  Object.assign(course, pick(req.body, FIELDS));
+  const updates = pick(req.body, FIELDS);
+  Object.assign(course, updates);
   await course.save();
+  await audit(req, { action: 'course.update', targetType: 'Course', targetId: course._id, targetLabel: `${course.code} ${course.title}`, metadata: { fields: Object.keys(updates) } });
   res.json({ success: true, message: 'Course updated.', data: course });
 });
 
@@ -133,8 +139,28 @@ exports.togglePublish = asyncHandler(async (req, res) => {
   if (!course.isPublished && !(await Lesson.exists({ course: course._id }))) {
     throw new ApiError(400, 'Add at least one lesson before publishing.');
   }
+  const isFirstPublish = !course.isPublished && !course.firstPublishedAt;
   course.isPublished = !course.isPublished;
+  if (course.isPublished && !course.firstPublishedAt) course.firstPublishedAt = new Date();
   await course.save();
+  await audit(req, { action: 'course.publish', targetType: 'Course', targetId: course._id, targetLabel: `${course.code} ${course.title}`, metadata: { published: course.isPublished } });
+
+  // Only the FIRST time a course goes live, tell the agents whose batches include it.
+  if (isFirstPublish) {
+    const batches = await Batch.find({ courses: course._id }).select('_id');
+    if (batches.length) {
+      const agents = await User.find({ batch: { $in: batches.map((b) => b._id) }, role: 'agent' }).select('_id');
+      await notify(
+        agents.map((a) => a._id),
+        {
+          type: 'course.published',
+          title: 'New course available',
+          message: `${course.code} — ${course.title} is now available in your training.`,
+          link: `/agent/courses/${course._id}`,
+        }
+      );
+    }
+  }
   res.json({ success: true, message: course.isPublished ? 'Course published.' : 'Course unpublished.', data: course });
 });
 
@@ -152,6 +178,9 @@ exports.deleteCourse = asyncHandler(async (req, res) => {
     Certificate.deleteMany({ course: course._id }),
     Batch.updateMany({ courses: course._id }, { $pull: { courses: course._id } }),
   ]);
+  const label = `${course.code} ${course.title}`;
+  const deletedId = course._id;
   await course.deleteOne();
+  await audit(req, { action: 'course.delete', targetType: 'Course', targetId: deletedId, targetLabel: label });
   res.json({ success: true, message: 'Course deleted.' });
 });

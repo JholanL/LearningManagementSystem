@@ -20,6 +20,8 @@ const scenarioBody = (isUpdate = false) => {
     body('steps.*.options.*.text').trim().notEmpty().withMessage('Option text is required'),
     body('steps.*.options.*.score').isInt({ min: 0, max: 10 }).withMessage('Option score must be 0-10').toInt(),
     body('steps.*.options.*.feedback').optional().trim().isLength({ max: 500 }),
+    body('steps.*.options.*.keywords').optional().isArray({ max: 10 }).withMessage('Up to 10 keywords per option'),
+    body('steps.*.options.*.keywords.*').optional().isString().trim().isLength({ max: 30 }),
     body('passingScore').optional().isInt({ min: 1, max: 100 }).toInt(),
   ];
 };
@@ -33,6 +35,14 @@ const submit = [
   body('path').isArray({ min: 1, max: 30 }).withMessage('path must be a non-empty array'),
   body('path.*.stepKey').trim().notEmpty(),
   body('path.*.optionIndex').isInt({ min: 0, max: 3 }).toInt(),
+  // Optional voice-mode payload (feature 1)
+  body('mode').optional().isIn(['text', 'voice']).withMessage('mode must be text or voice'),
+  body('transcript').optional().isArray({ max: 60 }).withMessage('Transcript is too long'),
+  body('transcript.*.speaker').optional().isIn(['customer', 'agent']),
+  body('transcript.*.text').optional().isString().isLength({ max: 1000 }).withMessage('Transcript line too long'),
+  body('timing').optional().isArray({ max: 60 }),
+  body('timing.*.silenceBeforeMs').optional().isNumeric(),
+  body('timing.*.durationMs').optional().isNumeric(),
 ];
 
 module.exports = {

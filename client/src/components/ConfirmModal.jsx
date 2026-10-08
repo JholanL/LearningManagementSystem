@@ -4,6 +4,7 @@ import { Button, Modal, Spinner } from 'react-bootstrap';
 export default function ConfirmModal({
   show,
   title = 'Are you sure?',
+  subtitle,
   message,
   confirmText = 'Delete',
   variant = 'danger',
@@ -14,7 +15,10 @@ export default function ConfirmModal({
   return (
     <Modal show={show} onHide={loading ? undefined : onCancel} centered>
       <Modal.Header closeButton={!loading}>
-        <Modal.Title className="h5">{title}</Modal.Title>
+        <div>
+          <Modal.Title className="h5">{title}</Modal.Title>
+          {subtitle && <p className="modal-subtitle">{subtitle}</p>}
+        </div>
       </Modal.Header>
       <Modal.Body>{message}</Modal.Body>
       <Modal.Footer>

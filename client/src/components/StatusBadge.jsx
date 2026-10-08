@@ -1,32 +1,28 @@
-import { Badge } from 'react-bootstrap';
-
-// Consistent colors for every status/role label in the app
+// Consistent, tinted colors for every status/role label in the app.
+// Each entry is [tone family, label]. Tone families are styled in index.css
+// (.badge-green / -amber / -red / -blue / -navy / -gray) as soft bg + dark text.
 const MAP = {
   // batch
-  upcoming: ['info', 'Upcoming'],
-  ongoing: ['success', 'Ongoing'],
-  completed: ['secondary', 'Completed'],
+  upcoming: ['blue', 'Upcoming'],
+  ongoing: ['green', 'Ongoing'],
+  completed: ['gray', 'Completed'],
   // progress
-  not_started: ['light', 'Not started'],
-  in_progress: ['warning', 'In progress'],
+  not_started: ['gray', 'Not started'],
+  in_progress: ['amber', 'In progress'],
   // roles
-  admin: ['dark', 'Admin'],
-  trainer: ['primary', 'Trainer'],
-  agent: ['info', 'Agent'],
+  admin: ['navy', 'Admin'],
+  trainer: ['blue', 'Trainer'],
+  agent: ['blue', 'Agent'],
   // generic
-  published: ['success', 'Published'],
-  draft: ['light', 'Draft'],
-  active: ['success', 'Active'],
-  inactive: ['danger', 'Inactive'],
-  passed: ['success', 'Passed'],
-  failed: ['danger', 'Failed'],
+  published: ['green', 'Published'],
+  draft: ['gray', 'Draft'],
+  active: ['green', 'Active'],
+  inactive: ['red', 'Inactive'],
+  passed: ['green', 'Passed'],
+  failed: ['red', 'Failed'],
 };
 
 export default function StatusBadge({ status, label }) {
-  const [bg, text] = MAP[status] || ['secondary', status];
-  return (
-    <Badge bg={bg} text={bg === 'light' || bg === 'warning' ? 'dark' : undefined} className="status-badge">
-      {label || text}
-    </Badge>
-  );
+  const [tone, text] = MAP[status] || ['gray', status];
+  return <span className={`badge-tone badge-${tone} status-badge`}>{label || text}</span>;
 }

@@ -4,6 +4,7 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { paginate, searchFilter } = require('../utils/query');
+const { computeDelivery } = require('../utils/deliveryMetrics');
 
 const FIELDS = ['title', 'description', 'category', 'difficulty', 'customer', 'startStep', 'steps', 'passingScore'];
 const MAX_STEP_SCORE = 10;
@@ -154,8 +155,37 @@ exports.submit = asyncHandler(async (req, res) => {
 
   const totalScore = scored.reduce((sum, s) => sum + s.score, 0);
   const maxScore = scored.length * MAX_STEP_SCORE;
-  const percentage = Math.round((totalScore / maxScore) * 100);
+  const percentage = Math.round((totalScore / maxScore) * 100); // content score
   const passed = percentage >= scenario.passingScore;
+
+  // ----- Voice mode: recompute delivery on the SERVER (ignore any client-sent score) -----
+  const isVoice = req.body.mode === 'voice';
+  let voiceTranscript;
+  let delivery;
+  let combinedScore = percentage; // text mode: combined = content
+
+  if (isVoice) {
+    const rawTranscript = Array.isArray(req.body.transcript) ? req.body.transcript : [];
+    // Reject a transcript longer than this conversation could possibly produce
+    // (at most one customer line + one agent reply per step taken).
+    if (rawTranscript.length > scored.length * 2) {
+      throw new ApiError(422, 'Transcript is longer than the conversation allows.');
+    }
+
+    // Sanitise/clamp what we store (text capped, speaker whitelisted).
+    voiceTranscript = rawTranscript.slice(0, 60).map((e) => ({
+      speaker: e.speaker === 'customer' ? 'customer' : 'agent',
+      text: String(e.text || '').slice(0, 1000),
+      stepKey: e.stepKey,
+      offsetMs: Math.max(0, Number(e.offsetMs) || 0),
+      durationMs: Math.max(0, Number(e.durationMs) || 0),
+    }));
+
+    const agentTexts = voiceTranscript.filter((e) => e.speaker === 'agent').map((e) => e.text);
+    const timing = Array.isArray(req.body.timing) ? req.body.timing : [];
+    delivery = computeDelivery({ agentTexts, timing }); // deliveryScore is OUR number, not the client's
+    combinedScore = Math.round(percentage * 0.7 + delivery.deliveryScore * 0.3);
+  }
 
   const attempt = await ScenarioAttempt.create({
     user: req.user._id,
@@ -165,12 +195,26 @@ exports.submit = asyncHandler(async (req, res) => {
     maxScore,
     percentage,
     passed,
+    mode: isVoice ? 'voice' : 'text',
+    ...(isVoice && { transcript: voiceTranscript, delivery }),
+    combinedScore,
   });
 
   res.status(201).json({
     success: true,
     message: passed ? 'Great call handling!' : 'Keep practicing - review the feedback below.',
-    data: { attemptId: attempt._id, totalScore, maxScore, percentage, passed, passingScore: scenario.passingScore, transcript: scored },
+    data: {
+      attemptId: attempt._id,
+      totalScore,
+      maxScore,
+      percentage,
+      passed,
+      passingScore: scenario.passingScore,
+      transcript: scored, // scored path (unchanged shape used by the results screen)
+      mode: isVoice ? 'voice' : 'text',
+      combinedScore,
+      ...(isVoice && { delivery }),
+    },
   });
 });
 

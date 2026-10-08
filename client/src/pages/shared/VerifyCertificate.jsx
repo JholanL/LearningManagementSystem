@@ -57,6 +57,13 @@ export default function VerifyCertificate() {
                 <i className="bi bi-x-octagon-fill" /> {error}
               </Alert>
             )}
+            {!result && !error && !loading && (
+              <p className="verify-hint mt-3 mb-0">
+                <i className="bi bi-qr-code-scan me-1" />
+                On a phone? Scan the QR code on a certificate to open this page instantly.
+              </p>
+            )}
+
             {result && (
               <div className="verify-result mt-4">
                 <div className="d-flex align-items-center gap-2 text-success fw-semibold mb-3">

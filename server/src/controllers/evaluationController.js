@@ -5,6 +5,8 @@ const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { paginate, searchFilter } = require('../utils/query');
 const { getTrainerBatchIds } = require('../services/accessService');
+const { audit } = require('../services/auditService');
+const { notify } = require('../services/notificationService');
 
 const FIELDS = ['agent', 'callType', 'callSummary', 'scores', 'strengths', 'areasForImprovement', 'coachingPlan'];
 const { CRITERIA } = Evaluation;
@@ -63,8 +65,16 @@ exports.getEvaluation = asyncHandler(async (req, res) => {
 // POST /api/evaluations   (trainer, admin)
 exports.createEvaluation = asyncHandler(async (req, res) => {
   const data = pick(req.body, FIELDS);
-  await assertTrainerHandlesAgent(req.user, data.agent);
+  const agent = await assertTrainerHandlesAgent(req.user, data.agent);
   const evaluation = await Evaluation.create({ ...data, evaluator: req.user._id });
+
+  await audit(req, { action: 'evaluation.create', targetType: 'Evaluation', targetId: evaluation._id, targetLabel: `${agent.firstName} ${agent.lastName}`, metadata: { overallScore: evaluation.overallScore } });
+  await notify(agent._id, {
+    type: 'evaluation.new',
+    title: 'New QA evaluation',
+    message: `${req.user.firstName} ${req.user.lastName} scored your call ${evaluation.overallScore}% (${evaluation.rating}).`,
+    link: '/agent/evaluations',
+  });
   res.status(201).json({ success: true, message: 'Evaluation saved.', data: evaluation });
 });
 

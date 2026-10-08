@@ -16,6 +16,7 @@ const courseSchema = new mongoose.Schema(
     thumbnailUrl: { type: String, trim: true },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     isPublished: { type: Boolean, default: false },
+    firstPublishedAt: { type: Date }, // set the first time the course is published (used to notify agents only once)
   },
   { timestamps: true }
 );

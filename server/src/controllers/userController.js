@@ -9,6 +9,7 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { paginate, searchFilter } = require('../utils/query');
+const { audit } = require('../services/auditService');
 
 const FIELDS = ['firstName', 'lastName', 'email', 'password', 'role', 'employeeId', 'phone', 'avatarUrl', 'batch', 'isActive'];
 
@@ -43,6 +44,7 @@ exports.createUser = asyncHandler(async (req, res) => {
   await assertValidBatch(data.batch, data.role);
   if (await User.exists({ email: data.email })) throw new ApiError(409, 'Email is already registered.');
   const user = await User.create(data);
+  await audit(req, { action: 'user.create', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}`, metadata: { role: user.role } });
   res.status(201).json({ success: true, message: 'User created.', data: user });
 });
 
@@ -72,6 +74,8 @@ exports.updateUser = asyncHandler(async (req, res) => {
   Object.assign(user, updates);
   await user.save();
   await user.populate('batch', 'name account');
+  // record WHICH fields changed, never their values (so no password ever lands in the log)
+  await audit(req, { action: 'user.update', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}`, metadata: { fields: Object.keys(updates).filter((k) => k !== 'password') } });
   res.json({ success: true, message: 'User updated.', data: user });
 });
 
@@ -83,6 +87,7 @@ exports.toggleStatus = asyncHandler(async (req, res) => {
   user.isActive = !user.isActive;
   if (!user.isActive) user.tokenVersion += 1; // kick out active sessions
   await user.save({ validateBeforeSave: false });
+  await audit(req, { action: 'user.status', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}`, metadata: { isActive: user.isActive } });
   res.json({ success: true, message: `User ${user.isActive ? 'activated' : 'deactivated'}.`, data: user });
 });
 
@@ -93,6 +98,7 @@ exports.unlockUser = asyncHandler(async (req, res) => {
   user.failedLoginAttempts = 0;
   user.lockUntil = undefined;
   await user.save({ validateBeforeSave: false });
+  await audit(req, { action: 'user.unlock', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}` });
   res.json({ success: true, message: 'Account unlocked.', data: user });
 });
 
@@ -112,6 +118,9 @@ exports.deleteUser = asyncHandler(async (req, res) => {
     Certificate.deleteMany({ user: user._id }),
     Evaluation.deleteMany({ agent: user._id }),
   ]);
+  const label = `${user.firstName} ${user.lastName}`; // snapshot before the record is gone
+  const deletedId = user._id;
   await user.deleteOne();
+  await audit(req, { action: 'user.delete', targetType: 'User', targetId: deletedId, targetLabel: label, metadata: { role: user.role, email: user.email } });
   res.json({ success: true, message: 'User deleted.' });
 });

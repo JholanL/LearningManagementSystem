@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { Link, NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { Dropdown, Offcanvas } from 'react-bootstrap';
 import { useAuth } from '../context/AuthContext';
 import { NAVIGATION } from '../config/navigation';
 import { fullName, initials, ROLE_LABEL } from '../utils/helpers';
+import NotificationBell from '../components/NotificationBell';
 
 function Brand() {
   return (
@@ -12,7 +13,8 @@ function Brand() {
         <i className="bi bi-headset" />
       </span>
       <span className="brand-text">
-        VoiceLink <span>Academy</span>
+        VoiceLink
+        <span className="brand-sub">Academy</span>
       </span>
     </Link>
   );
@@ -28,11 +30,26 @@ function Avatar({ user, size = 36 }) {
   );
 }
 
+// Breadcrumb from the current route: "Trainer Portal / <section> [/ Details]"
+function useBreadcrumb(role) {
+  const { pathname } = useLocation();
+  const links = NAVIGATION[role] || [];
+  // longest matching nav link wins (so /trainer/courses beats /trainer)
+  const match = links
+    .filter((l) => pathname === l.to || pathname.startsWith(`${l.to}/`))
+    .sort((a, b) => b.to.length - a.to.length)[0];
+  let section = match?.label;
+  if (pathname.startsWith('/profile')) section = 'My Profile';
+  const isDetail = match && pathname.startsWith(`${match.to}/`);
+  return { root: `${ROLE_LABEL[role]} Portal`, section, isDetail };
+}
+
 export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
   const links = NAVIGATION[user.role] || [];
+  const crumb = useBreadcrumb(user.role);
 
   const handleLogout = async () => {
     await logout();
@@ -60,10 +77,14 @@ export default function DashboardLayout() {
             ))}
           </nav>
           <div className="sidebar-footer">
-            <NavLink to="/profile" className="sidebar-link" onClick={() => setShowMenu(false)}>
-              <i className="bi bi-person-circle" />
-              <span>My Profile</span>
-            </NavLink>
+            {/* User card -> profile */}
+            <Link to="/profile" className="sidebar-user" onClick={() => setShowMenu(false)}>
+              <Avatar user={user} size={34} />
+              <span className="min-w-0">
+                <span className="su-name d-block text-truncate">{fullName(user)}</span>
+                <span className="su-role d-block text-truncate">{user.batch?.name || ROLE_LABEL[user.role]}</span>
+              </span>
+            </Link>
             <button type="button" className="sidebar-link w-100 border-0 bg-transparent text-start" onClick={handleLogout}>
               <i className="bi bi-box-arrow-left" />
               <span>Log out</span>
@@ -77,10 +98,35 @@ export default function DashboardLayout() {
           <button type="button" className="btn btn-icon d-lg-none" onClick={() => setShowMenu(true)} aria-label="Open menu">
             <i className="bi bi-list fs-4" />
           </button>
-          <div className="d-lg-none">
+
+          {/* Breadcrumb (hidden on the smallest screens) */}
+          <nav className="breadcrumb-trail d-none d-sm-flex" aria-label="Breadcrumb">
+            <span>{crumb.root}</span>
+            {crumb.section && (
+              <>
+                <i className="bi bi-chevron-right" />
+                <span className={crumb.isDetail ? '' : 'crumb-current'}>{crumb.section}</span>
+              </>
+            )}
+            {crumb.isDetail && (
+              <>
+                <i className="bi bi-chevron-right" />
+                <span className="crumb-current">Details</span>
+              </>
+            )}
+          </nav>
+
+          {/* Mobile brand (when breadcrumb is hidden) */}
+          <div className="d-sm-none">
             <Brand />
           </div>
-          <div className="ms-auto">
+
+          <div className="ms-auto d-flex align-items-center gap-2 gap-md-3">
+            <div className="topbar-search position-relative d-none d-md-block">
+              <i className="bi bi-search" />
+              <input type="search" className="form-control" placeholder="Search..." aria-label="Search" />
+            </div>
+            <NotificationBell />
             <Dropdown align="end">
               <Dropdown.Toggle variant="link" className="user-toggle d-flex align-items-center gap-2 text-decoration-none">
                 <Avatar user={user} />

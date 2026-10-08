@@ -9,6 +9,12 @@ const optionSchema = new mongoose.Schema(
     score: { type: Number, required: true, min: 0, max: 10 },
     feedback: { type: String, trim: true, maxlength: 500 },
     nextStep: { type: String, default: null }, // step key, or null to end the call
+    // Optional key phrases that help voice matching recognise this option (feature 1).
+    keywords: {
+      type: [{ type: String, trim: true, lowercase: true, maxlength: 30 }],
+      validate: [(v) => !v || v.length <= 10, 'A maximum of 10 keywords per option'],
+      default: undefined,
+    },
   },
   { _id: false }
 );
@@ -70,7 +76,8 @@ scenarioSchema.methods.publicStep = function (key) {
   return {
     key: step.key,
     customerLine: step.customerLine,
-    options: step.options.map((o, index) => ({ index, text: o.text })),
+    // keywords are safe to expose (they are matching hints, not scores)
+    options: step.options.map((o, index) => ({ index, text: o.text, keywords: o.keywords || [] })),
   };
 };
 

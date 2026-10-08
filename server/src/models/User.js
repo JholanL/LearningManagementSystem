@@ -18,6 +18,10 @@ const userSchema = new mongoose.Schema(
     batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null }, // agents only
     isActive: { type: Boolean, default: true },
 
+    // Go-live endorsement (feature 5): in_training -> endorsed (pending admin) -> production
+    productionStatus: { type: String, enum: ['in_training', 'endorsed', 'production'], default: 'in_training' },
+    goLiveAt: { type: Date },
+
     // Security fields
     tokenVersion: { type: Number, default: 0, select: false },
     failedLoginAttempts: { type: Number, default: 0, select: false },

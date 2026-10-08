@@ -19,6 +19,20 @@ export const formatDate = (value, opts = { year: 'numeric', month: 'short', day:
 export const formatDateTime = (value) =>
   value ? new Date(value).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' }) : '-';
 
+// Short relative time, e.g. "just now", "5m", "3h", "2d", else a date.
+export const timeAgo = (value) => {
+  if (!value) return '';
+  const seconds = Math.floor((Date.now() - new Date(value).getTime()) / 1000);
+  if (seconds < 45) return 'just now';
+  const mins = Math.floor(seconds / 60);
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return formatDate(value);
+};
+
 // For <input type="date"> values
 export const toDateInput = (value) => (value ? new Date(value).toISOString().slice(0, 10) : '');
 

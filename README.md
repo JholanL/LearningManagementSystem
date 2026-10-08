@@ -27,7 +27,7 @@ cp .env.example .env
 npm run dev               # App on http://localhost:5173
 ```
 
-**API tests:** with a freshly seeded DB and the API running, `cd server && npm run test:api` runs 121 end-to-end checks (auth, RBAC, validation, CRUD, grading, certificates, security).
+**API tests:** with a freshly seeded DB and the API running, `cd server && npm run test:api` runs 177 end-to-end checks (auth, RBAC, validation, CRUD, grading, certificates, security, plus the 8 innovation features). Restart the server between runs (login rate limit).
 
 ### Demo accounts (after `npm run seed`)
 
@@ -110,26 +110,33 @@ server/src
 ├── app.js / server.js     Express app (exported for serverless) + local entry
 ├── config/db.js           Cached MongoDB connection
 ├── models/                User, Batch, Course, Lesson, Quiz, QuizAttempt, Progress,
-│                          Certificate, Scenario, ScenarioAttempt, Evaluation
+│                          Certificate, Scenario, ScenarioAttempt, Evaluation,
+│                          AuditLog, Notification, KbArticle, KbFeedback,
+│                          Endorsement, DrillSession
 ├── controllers/           Business logic per resource
 ├── routes/                URL → middleware → controller
 ├── validators/            express-validator rules
 ├── middleware/            protect, authorize, validate, errorHandler
-├── services/              progress calculation, access checks
-├── utils/                 ApiError, asyncHandler, pagination/search, token, pick
+├── services/              progressService, accessService, readinessService,
+│                          auditService (never throws), notificationService (never throws)
+├── utils/                 ApiError, asyncHandler, pagination/search, token, pick,
+│                          deliveryMetrics (voice scoring), manilaDate (Asia/Manila)
 └── seed/                  Demo data + seed script
 
 client/src
 ├── api/                   axios instance + services.js (all endpoints)
 ├── context/               AuthContext, ToastContext
-├── hooks/                 usePaginatedList, useFetch, useDebounce
+├── hooks/                 usePaginatedList, useFetch, useDebounce, useVoice (Web Speech)
 ├── routes/                ProtectedRoute, GuestRoute
-├── layouts/               DashboardLayout (sidebar), AuthLayout
-├── components/            Reusable UI pieces
+├── layouts/               DashboardLayout (sidebar + notification bell), AuthLayout
+├── components/            Reusable UI pieces (NotificationBell, KnowledgeBaseDrawer,
+│                          CourseAnalytics, AgentTrendModal, EndorsementModal, ...)
 ├── config/navigation.js   Sidebar menu per role
-├── pages/{auth,shared,admin,trainer,agent}
-└── utils/                 helpers, validators
+├── pages/{auth,shared,admin,trainer,agent,dev}
+└── utils/                 helpers, validators, matchResponse, deliveryMetrics, certificatePdf
 ```
+
+Charts use **Recharts**; certificate PDFs use **jsPDF** + **qrcode**.
 
 ---
 
@@ -188,8 +195,10 @@ List endpoints accept `?search=&page=&limit=` and return `{ data, pagination: { 
 | GET/PUT/DELETE | /scenarios/:id | Agent gets briefing + first step only |
 | PATCH | /scenarios/:id/publish | |
 | POST | /scenarios/:id/respond | Agent · `{ stepKey, optionIndex }` → feedback + next step |
-| POST | /scenarios/:id/submit | Agent · `{ path: [{ stepKey, optionIndex }] }` → score + transcript |
-| GET | /scenarios/:id/attempts | |
+| POST | /scenarios/:id/submit | Agent · `{ path }` (text) or `{ path, mode:'voice', transcript, timing }` (voice). Server recomputes delivery and stores `combinedScore` |
+| GET | /scenarios/:id/attempts | Includes `mode`, `delivery` and `combinedScore` for voice attempts |
+
+**Voice mode (feature 1):** `Scenario.options[].keywords` aid matching; `ScenarioAttempt` stores `mode`, `transcript`, `delivery` (dead air, fillers incl. Taglish, WPM) and `combinedScore` (`content·0.7 + delivery·0.3`). The server is the source of truth — a client-sent delivery score is ignored.
 
 ### QA evaluations
 | Method | Endpoint | Access / notes |
@@ -204,13 +213,63 @@ List endpoints accept `?search=&page=&limit=` and return `{ data, pagination: { 
 |---|---|---|
 | GET | /progress/me | Agent |
 | GET | /progress/batch/:batchId | Agents × courses matrix |
-| GET | /certificates/me | Agent |
+| GET | /certificates/me | Agent · also returns `holder` + batch `trainer` name for the PDF |
 | GET | /certificates | Admin, Trainer |
 | GET | /certificates/verify/:code | **Public** |
 | GET | /dashboard/admin · /dashboard/trainer · /dashboard/agent | Per role |
 | GET | /leaderboard?batch=id | Agent: own batch automatically |
 | GET | /meta | Public · dropdown values |
 | GET | /health | Public |
+
+### Knowledge base (feature 2)
+| Method | Endpoint | Access / notes |
+|---|---|---|
+| GET | /kb | All · `search`, `category`, `tag` · agents see published only |
+| GET | /kb/popular | All · top 5 by views |
+| GET | /kb/:slug | All · increments views · `+helpfulYes/No`, `myVote`, related courses |
+| POST | /kb | Admin, Trainer |
+| PUT | /kb/:id | Admin, or the authoring trainer |
+| PATCH | /kb/:id/publish | Admin, Trainer · audit logged |
+| DELETE | /kb/:id | Admin · audit logged |
+| POST | /kb/:id/feedback | All · `{ helpful }` upsert (one vote per user) |
+
+### Question analytics (feature 3 · owner trainer / admin)
+| Method | Endpoint | Returns |
+|---|---|---|
+| GET | /analytics/quiz/:quizId?batch= | summary, score distribution, per-question correctRate + optionCounts + `needsReview` |
+| GET | /analytics/course/:courseId?batch= | lesson funnel, per-quiz summary, simulator usage |
+| GET | /analytics/agent/:agentId | quiz/simulator/evaluation trends + weakest category |
+
+### Go-live endorsement (feature 5)
+| Method | Endpoint | Access / notes |
+|---|---|---|
+| GET | /endorsements/eligibility/:agentId | Trainer (own batch), Admin · checklist + snapshot |
+| POST | /endorsements | Trainer · `{ agentId, note }` · 400 + checklist if not eligible |
+| GET | /endorsements | Admin all · Trainer own · Agent own · `status`, `batch` |
+| PATCH | /endorsements/:id/approve | Admin → agent `production`, `goLiveAt` |
+| PATCH | /endorsements/:id/reject | Admin · note required → agent `in_training` |
+| PATCH | /endorsements/:id/revoke | Admin · for approved endorsements |
+
+### Daily drill (feature 7 · agent)
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | /drill/today | Deterministic 5 questions (wrong answers first), no answers in payload, + streak |
+| POST | /drill/submit | `{ answers }` · server grading · 409 if already done · returns review + streak |
+| GET | /drill/history | Past completed sessions |
+
+### Notifications (feature 6 · own only)
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | /notifications | `unread=true` filter · also returns `unreadCount` |
+| GET | /notifications/unread-count | `{ count }` for the topbar bell |
+| PATCH | /notifications/:id/read · /read-all | Owner only |
+| DELETE | /notifications/:id | Owner only |
+
+### Audit log (feature 8 · admin)
+| Method | Endpoint | Notes |
+|---|---|---|
+| GET | /audit-logs | `search`, `action`, `actor`, `from`, `to` · newest first |
+| GET | /audit-logs/actions | Distinct action names for the filter |
 
 ---
 

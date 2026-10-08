@@ -1,5 +1,13 @@
 import { Link } from 'react-router-dom';
 
+const YEAR = new Date().getFullYear();
+
+const HIGHLIGHTS = [
+  { icon: 'bi-journal-check', title: 'Structured courses', text: 'Lessons and graded quizzes per training wave.' },
+  { icon: 'bi-headset', title: 'Call simulator', text: 'Branching customer calls with instant coaching.' },
+  { icon: 'bi-award', title: 'Verifiable certificates', text: 'Earn a code anyone can verify online.' },
+];
+
 // Split screen used by Login and Register
 export default function AuthLayout({ title, subtitle, children }) {
   return (
@@ -9,26 +17,29 @@ export default function AuthLayout({ title, subtitle, children }) {
           <div className="brand-mark brand-mark-lg mb-4">
             <i className="bi bi-headset" />
           </div>
+          <div className="auth-overline">VoiceLink Solutions · Agent Academy</div>
           <h2 className="display-6 fw-bold mb-3">
             Train agents who are <span className="text-accent">ready for the floor.</span>
           </h2>
-          <p className="lead opacity-75 mb-4">
-            VoiceLink Academy prepares new-hire call center agents with structured courses, graded assessments, and realistic call simulations.
+          <p className="lead opacity-75 mb-0">
+            Structured courses, graded assessments, and realistic call simulations for new-hire call center agents.
           </p>
-          <ul className="auth-hero-list list-unstyled">
-            <li>
-              <i className="bi bi-journal-check" /> Courses and quizzes per training wave
-            </li>
-            <li>
-              <i className="bi bi-headset" /> Branching call simulator with instant feedback
-            </li>
-            <li>
-              <i className="bi bi-clipboard-check" /> QA scorecards and coaching
-            </li>
-            <li>
-              <i className="bi bi-award" /> Verifiable completion certificates
-            </li>
-          </ul>
+
+          <div className="auth-tiles">
+            {HIGHLIGHTS.map((h) => (
+              <div key={h.title} className="auth-tile">
+                <span className="auth-tile-icon">
+                  <i className={`bi ${h.icon}`} />
+                </span>
+                <span className="auth-tile-text">
+                  <strong>{h.title}</strong>
+                  <span>{h.text}</span>
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <p className="auth-footer-note mt-4 mb-0">© {YEAR} VoiceLink Solutions — training platform for the Lumina Telecom account.</p>
         </div>
       </aside>
 

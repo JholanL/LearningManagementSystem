@@ -15,7 +15,13 @@ const Certificate = require('../models/Certificate');
 const Scenario = require('../models/Scenario');
 const ScenarioAttempt = require('../models/ScenarioAttempt');
 const Evaluation = require('../models/Evaluation');
+const AuditLog = require('../models/AuditLog');
+const Notification = require('../models/Notification');
+const KbArticle = require('../models/KbArticle');
+const KbFeedback = require('../models/KbFeedback');
+const Endorsement = require('../models/Endorsement');
 const { syncCourseCompletion } = require('../services/progressService');
+const { computeReadiness } = require('../services/readinessService');
 const seed = require('./seedData');
 
 const daysFromToday = (n) => new Date(Date.now() + n * 86400000);
@@ -38,8 +44,9 @@ async function takeQuiz(user, course, correctCount) {
   const percentage = Math.round((score / quiz.totalPoints) * 100);
   const passed = percentage >= course.passingScore;
   const attemptNumber = (await QuizAttempt.countDocuments({ user: user._id, quiz: quiz._id })) + 1;
+  const answerDetails = quiz.questions.map((q, i) => ({ questionId: q._id, selected: answers[i], correct: answers[i] === q.correctAnswer }));
   await QuizAttempt.create({
-    user: user._id, quiz: quiz._id, course: course._id, answers, score,
+    user: user._id, quiz: quiz._id, course: course._id, answers, answerDetails, score,
     totalPoints: quiz.totalPoints, percentage, passed, attemptNumber, timeTakenSeconds: 240 + correctCount * 30,
   });
   if (passed) await syncCourseCompletion(user._id, course._id);
@@ -66,7 +73,7 @@ async function run() {
   await connectDB();
   console.log('Clearing old data...');
   await Promise.all(
-    [User, Batch, Course, Lesson, Quiz, QuizAttempt, Progress, Certificate, Scenario, ScenarioAttempt, Evaluation].map((M) => M.deleteMany({}))
+    [User, Batch, Course, Lesson, Quiz, QuizAttempt, Progress, Certificate, Scenario, ScenarioAttempt, Evaluation, AuditLog, Notification, KbArticle, KbFeedback, Endorsement].map((M) => M.deleteMany({}))
   );
 
   console.log('Creating users...');
@@ -163,7 +170,66 @@ async function run() {
     scores: { greeting: 5, empathy: 5, productKnowledge: 5, resolution: 5, compliance: 5, closing: 4 },
     strengths: 'Excellent ownership and de-escalation.',
     areasForImprovement: 'Minor: confirm the callback number at closing.',
+    acknowledged: true, acknowledgedAt: new Date(), agentComment: 'Thank you, noted!',
   });
+
+  console.log('Creating audit log entries...');
+  const maria = trainers[0];
+  const fn = (u) => `${u.firstName} ${u.lastName}`;
+  const actorOf = (u) => ({ actor: u._id, actorName: fn(u), actorRole: u.role });
+  await AuditLog.insertMany([
+    { ...actorOf(admin), action: 'auth.login', targetType: 'User', targetId: admin._id, targetLabel: fn(admin), ip: '127.0.0.1', userAgent: 'Mozilla/5.0 (seed)', createdAt: daysFromToday(-3) },
+    { ...actorOf(maria), action: 'course.create', targetType: 'Course', targetId: csf._id, targetLabel: `${csf.code} ${csf.title}`, ip: '127.0.0.1', userAgent: 'Mozilla/5.0 (seed)', createdAt: daysFromToday(-3) },
+    { ...actorOf(maria), action: 'course.publish', targetType: 'Course', targetId: csf._id, targetLabel: `${csf.code} ${csf.title}`, metadata: { published: true }, ip: '127.0.0.1', userAgent: 'Mozilla/5.0 (seed)', createdAt: daysFromToday(-3) },
+    { ...actorOf(admin), action: 'batch.create', targetType: 'Batch', targetId: wave12._id, targetLabel: wave12.name, ip: '127.0.0.1', userAgent: 'Mozilla/5.0 (seed)', createdAt: daysFromToday(-2) },
+    { ...actorOf(maria), action: 'evaluation.create', targetType: 'Evaluation', targetId: carlo._id, targetLabel: fn(carlo), metadata: { overallScore: 55 }, ip: '127.0.0.1', userAgent: 'Mozilla/5.0 (seed)', createdAt: daysFromToday(-1) },
+    { actor: null, actorName: 'gino.torres@voicelink.ph', actorRole: 'guest', action: 'auth.login_failed', metadata: { email: 'gino.torres@voicelink.ph', reason: 'bad_password' }, ip: '203.0.113.9', userAgent: 'Mozilla/5.0 (seed)', createdAt: daysFromToday(-1) },
+    { ...actorOf(admin), action: 'user.unlock', targetType: 'User', targetId: agents[6]._id, targetLabel: fn(agents[6]), ip: '127.0.0.1', userAgent: 'Mozilla/5.0 (seed)', createdAt: daysFromToday(0) },
+  ]);
+
+  console.log('Creating notifications...');
+  await Notification.insertMany([
+    { user: juan._id, type: 'evaluation.new', title: 'New QA evaluation', message: `${fn(maria)} scored your call 88% (Meets Expectations).`, link: '/agent/evaluations', read: false, createdAt: daysFromToday(-1) },
+    { user: juan._id, type: 'quiz.result', title: 'Quiz passed 🎉', message: 'You passed Customer Service Fundamentals with 100%.', link: `/agent/courses/${csf._id}`, read: true, readAt: new Date(), createdAt: daysFromToday(-2) },
+    { user: carlo._id, type: 'quiz.result', title: 'Quiz result', message: 'You scored 40% on Customer Service Fundamentals. 0 attempt(s) left.', link: `/agent/courses/${csf._id}`, read: false, createdAt: daysFromToday(-1) },
+    { user: faye._id, type: 'course.published', title: 'New course available', message: `${ltp.code} — ${ltp.title} is now available in your training.`, link: `/agent/courses/${ltp._id}`, read: false, createdAt: daysFromToday(0) },
+    { user: maria._id, type: 'agent.at_risk', title: 'Agent at risk', message: `${fn(carlo)} failed "Customer Service Fundamentals" and has no attempts left.`, link: `/trainer/batches/${wave12._id}`, read: false, createdAt: daysFromToday(-1) },
+  ]);
+
+  console.log('Creating knowledge base articles...');
+  const courseByCode = Object.fromEntries(courses.map((c) => [c.code, c._id]));
+  const slugify = (t) => t.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+  for (const a of seed.kbArticles) {
+    const { relatedCourseCodes = [], ...rest } = a;
+    await KbArticle.create({
+      ...rest,
+      slug: slugify(a.title),
+      author: maria._id,
+      updatedBy: maria._id,
+      relatedCourses: relatedCourseCodes.map((code) => courseByCode[code]).filter(Boolean),
+    });
+  }
+
+  console.log('Creating a pending go-live endorsement (Faye)...');
+  const fayeCourseIds = courses.slice(0, 4).filter((c) => c.isPublished).map((c) => c._id);
+  const fayeReadiness = (await computeReadiness([faye._id], fayeCourseIds))[String(faye._id)];
+  await Endorsement.create({
+    agent: faye._id,
+    batch: wave12._id,
+    requestedBy: maria._id,
+    status: 'pending',
+    trainerNote: 'Faye completed the full curriculum with strong scores. Endorsing for production.',
+    snapshot: {
+      overallPercent: fayeReadiness.overallPercent,
+      averageQuizScore: fayeReadiness.averageQuizScore,
+      averageSimulatorScore: fayeReadiness.averageSimulatorScore,
+      averageEvaluationScore: fayeReadiness.averageEvaluationScore,
+      readinessScore: fayeReadiness.readinessScore,
+      coursesCompleted: fayeReadiness.coursesCompleted,
+      totalCourses: fayeReadiness.totalCourses,
+    },
+  });
+  await User.updateOne({ _id: faye._id }, { $set: { productionStatus: 'endorsed' } });
 
   console.log('\nSeed complete! Demo accounts:');
   console.table([

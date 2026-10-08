@@ -1,12 +1,14 @@
 const Quiz = require('../models/Quiz');
 const Course = require('../models/Course');
 const QuizAttempt = require('../models/QuizAttempt');
+const Batch = require('../models/Batch');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { paginate } = require('../utils/query');
 const { assertCanViewCourse, assertCanEditCourse } = require('../services/accessService');
 const { syncCourseCompletion } = require('../services/progressService');
+const { notify } = require('../services/notificationService');
 
 const FIELDS = ['title', 'description', 'timeLimitMinutes', 'questions'];
 
@@ -122,6 +124,7 @@ exports.submitQuiz = asyncHandler(async (req, res) => {
     quiz: quiz._id,
     course: course._id,
     answers,
+    answerDetails: results.map((r) => ({ questionId: r.questionId, selected: r.selected, correct: r.isCorrect })),
     score,
     totalPoints,
     percentage,
@@ -132,6 +135,28 @@ exports.submitQuiz = asyncHandler(async (req, res) => {
 
   const revealAnswers = passed || attemptsLeft <= 0;
   const progress = passed ? await syncCourseCompletion(req.user._id, course._id) : null;
+
+  // Tell the agent their result...
+  await notify(req.user._id, {
+    type: 'quiz.result',
+    title: passed ? 'Quiz passed 🎉' : 'Quiz result',
+    message: passed
+      ? `You passed ${quiz.title} with ${percentage}%.`
+      : `You scored ${percentage}% on ${quiz.title}. ${Math.max(attemptsLeft, 0)} attempt(s) left.`,
+    link: `/agent/courses/${course._id}`,
+  });
+  // ...and flag the trainer when the agent fails their LAST attempt.
+  if (!passed && attemptsLeft <= 0 && req.user.batch) {
+    const batch = await Batch.findById(req.user.batch).select('trainer');
+    if (batch?.trainer) {
+      await notify(batch.trainer, {
+        type: 'agent.at_risk',
+        title: 'Agent at risk',
+        message: `${req.user.firstName} ${req.user.lastName} failed "${quiz.title}" and has no attempts left.`,
+        link: `/trainer/batches/${req.user.batch}`,
+      });
+    }
+  }
 
   res.status(201).json({
     success: true,

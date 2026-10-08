@@ -1,4 +1,4 @@
-// End-to-end API test (121 checks). Requires: npm run seed, then npm run dev in another terminal.
+// End-to-end API test (177 checks). Requires: npm run seed, then npm run dev in another terminal.
 // Run: npm run test:api   (uses API_URL or http://localhost:5000/api)
 // Note: the test logs in ~20 times, so restart the server between runs (login rate limit = 20 per 15 min).
 const BASE = process.env.API_URL || 'http://localhost:5000/api';
@@ -274,6 +274,42 @@ check('scenario attempts', r.status === 200);
 r = await call('DELETE', `/scenarios/${sc}`, { token: maria });
 check('delete scenario', r.status === 200);
 
+// ---------- VOICE SIMULATOR (feature 1) ----------
+const voicePath = [
+  { stepKey: 'opening', optionIndex: 0 },
+  { stepKey: 'verify', optionIndex: 0 },
+  { stepKey: 'explain', optionIndex: 0 },
+  { stepKey: 'resolve', optionIndex: 0 },
+  { stepKey: 'closing', optionIndex: 0 },
+];
+const voiceTranscript = [
+  { speaker: 'agent', text: 'Thank you for calling Lumina, um, may I verify your account', stepKey: 'opening' },
+  { speaker: 'agent', text: 'For your security may I have your birthdate or last payment', stepKey: 'verify' },
+  { speaker: 'agent', text: 'I understand, a streaming add-on was activated through a promo text', stepKey: 'explain' },
+  { speaker: 'agent', text: 'I have deactivated it and filed a courtesy adjustment', stepKey: 'resolve' },
+  { speaker: 'agent', text: 'To recap, the credit will show on your next bill, thank you', stepKey: 'closing' },
+];
+const voiceTiming = [
+  { silenceBeforeMs: 5000, durationMs: 4000 }, // one dead-air incident (>3s)
+  { silenceBeforeMs: 800, durationMs: 3500 },
+  { silenceBeforeMs: 1200, durationMs: 4000 },
+  { silenceBeforeMs: 500, durationMs: 3000 },
+  { silenceBeforeMs: 900, durationMs: 3500 },
+];
+r = await call('POST', `/scenarios/${billing._id}/submit`, {
+  token: juan,
+  body: { mode: 'voice', path: voicePath, transcript: voiceTranscript, timing: voiceTiming, deliveryScore: 999, combinedScore: 999 },
+});
+check('voice submit stores delivery + combinedScore', r.status === 201 && r.json.data.mode === 'voice' && r.json.data.delivery && r.json.data.delivery.deadAirCount === 1 && typeof r.json.data.combinedScore === 'number', r.json?.data);
+check('client-sent delivery score is ignored', r.json.data.delivery.deliveryScore !== 999 && r.json.data.delivery.deliveryScore <= 100 && r.json.data.combinedScore !== 999, r.json?.data);
+r = await call('GET', `/scenarios/${billing._id}/attempts`, { token: juan });
+check('voice transcript persisted', r.status === 200 && r.json.data.some((a) => a.mode === 'voice' && Array.isArray(a.transcript) && a.transcript.length === 5), r.json?.data?.map?.((a) => a.mode));
+r = await call('POST', `/scenarios/${billing._id}/submit`, {
+  token: juan,
+  body: { mode: 'voice', path: [{ stepKey: 'opening', optionIndex: 2 }, { stepKey: 'upset', optionIndex: 2 }], transcript: Array.from({ length: 61 }, () => ({ speaker: 'agent', text: 'uh', stepKey: 'opening' })) },
+});
+check('voice transcript too long 422', r.status === 422, r.json);
+
 // ---------- EVALUATIONS ----------
 r = await call('GET', '/evaluations/criteria', { token: maria });
 check('criteria', r.status === 200 && r.json.data.empathy.weight === 20);
@@ -296,7 +332,7 @@ check('acknowledge', r.status === 200 && r.json.data.acknowledged);
 r = await call('PUT', `/evaluations/${ev}`, { token: maria, body: { callSummary: 'changed' } });
 check('cannot edit acknowledged', r.status === 400);
 r = await call('GET', '/evaluations?acknowledged=false', { token: maria });
-check('trainer filter evals', r.status === 200 && r.json.data.length === 2, r.json?.data?.length);
+check('trainer filter evals', r.status === 200 && r.json.data.length === 1, r.json?.data?.length);
 r = await call('DELETE', `/evaluations/${ev}`, { token: maria });
 check('delete eval', r.status === 200);
 
@@ -322,6 +358,139 @@ r = await call('GET', '/meta');
 check('meta', r.status === 200 && r.json.data.courseCategories.length === 5);
 r = await call('GET', '/nope');
 check('404 route', r.status === 404);
+
+// ---------- AUDIT LOG (admin) ----------
+r = await call('GET', '/audit-logs', { token: juan });
+check('agent cannot read audit logs 403', r.status === 403);
+r = await call('GET', '/audit-logs', { token: maria });
+check('trainer cannot read audit logs 403', r.status === 403);
+r = await call('GET', '/audit-logs?limit=100', { token: admin });
+check('admin reads audit logs', r.status === 200 && Array.isArray(r.json.data) && r.json.data.length > 0, r.json?.pagination);
+const auditDump = JSON.stringify(r.json.data).toLowerCase();
+check('no audit entry leaks a password', !auditDump.includes('"password"') && !auditDump.includes('admin@123') && !auditDump.includes('agent@123'));
+r = await call('GET', '/audit-logs?action=auth.login_failed', { token: admin });
+check('failed login logged', r.status === 200 && r.json.data.length >= 1 && r.json.data.every((l) => l.action === 'auth.login_failed'), r.json?.pagination);
+r = await call('GET', '/audit-logs?action=auth.locked', { token: admin });
+check('account lockout logged', r.status === 200 && r.json.data.length >= 1, r.json?.pagination);
+r = await call('GET', '/audit-logs/actions', { token: admin });
+check('audit actions list', r.status === 200 && r.json.data.includes('auth.login_failed') && r.json.data.includes('user.delete'), r.json);
+
+// ---------- NOTIFICATIONS ----------
+// maria evaluated enzo earlier -> enzo should have an evaluation.new notification
+r = await call('GET', '/notifications', { token: enzo });
+check('enzo has evaluation notification', r.status === 200 && r.json.data.some((n) => n.type === 'evaluation.new') && typeof r.json.unreadCount === 'number', r.json?.data?.map?.((n) => n.type));
+r = await call('GET', '/notifications/unread-count', { token: enzo });
+check('unread count', r.status === 200 && typeof r.json.count === 'number' && r.json.count >= 1, r.json);
+// ownership: enzo cannot read or modify juan's notifications
+const juanNotifs = await call('GET', '/notifications', { token: juan });
+check('juan has seeded notifications', juanNotifs.status === 200 && juanNotifs.json.data.length >= 1, juanNotifs.json?.data?.length);
+const juanNotifId = juanNotifs.json.data[0]._id;
+r = await call('PATCH', `/notifications/${juanNotifId}/read`, { token: enzo });
+check('cannot read others notification 404', r.status === 404, r.json);
+r = await call('DELETE', `/notifications/${juanNotifId}`, { token: enzo });
+check('cannot delete others notification 404', r.status === 404, r.json);
+// enzo can mark his own as read
+const enzoNotifId = (await call('GET', '/notifications', { token: enzo })).json.data[0]._id;
+r = await call('PATCH', `/notifications/${enzoNotifId}/read`, { token: enzo });
+check('mark own notification read', r.status === 200 && r.json.data.read === true, r.json);
+r = await call('PATCH', '/notifications/read-all', { token: enzo });
+check('mark all read', r.status === 200);
+r = await call('GET', '/notifications/unread-count', { token: enzo });
+check('unread count zero after read-all', r.status === 200 && r.json.count === 0, r.json);
+
+// ---------- KNOWLEDGE BASE (feature 2) ----------
+r = await call('GET', '/kb?search=vas', { token: juan });
+check('kb search "vas" finds the article', r.status === 200 && r.json.data.length >= 1 && r.json.data.some((a) => /vas/i.test(a.title)), r.json?.data?.map?.((a) => a.title));
+const vas = r.json.data.find((a) => /vas/i.test(a.title));
+r = await call('GET', '/kb/popular', { token: juan });
+check('kb popular top 5', r.status === 200 && r.json.data.length >= 1 && r.json.data.length <= 5, r.json?.data?.length);
+r = await call('GET', `/kb/${vas.slug}`, { token: juan });
+check('kb article by slug', r.status === 200 && !!r.json.data.body && typeof r.json.data.helpfulYes === 'number' && r.json.data.myVote === null, r.json?.data);
+r = await call('POST', `/kb/${vas._id}/feedback`, { token: juan, body: { helpful: true } });
+check('kb vote yes', r.status === 200 && r.json.data.helpfulYes === 1 && r.json.data.helpfulNo === 0, r.json?.data);
+r = await call('POST', `/kb/${vas._id}/feedback`, { token: juan, body: { helpful: false } });
+check('kb voting twice updates, not adds', r.status === 200 && r.json.data.helpfulYes === 0 && r.json.data.helpfulNo === 1, r.json?.data);
+r = await call('POST', '/kb', { token: juan, body: { title: 'X', category: 'Product', body: 'y' } });
+check('agent cannot create kb 403', r.status === 403, r.json);
+r = await call('POST', '/kb', { token: maria, body: { title: 'Secret Draft Memo', category: 'Process', body: 'internal only', tags: ['internal'] } });
+check('trainer create kb (draft, slugged)', r.status === 201 && r.json.data.slug === 'secret-draft-memo' && r.json.data.status === 'draft', r.json);
+const draftKb = r.json.data;
+r = await call('GET', `/kb/${draftKb.slug}`, { token: juan });
+check('agent cannot see kb draft 404', r.status === 404, r.json);
+r = await call('GET', `/kb/${draftKb.slug}`, { token: maria });
+check('author sees own kb draft', r.status === 200, r.json);
+r = await call('PATCH', `/kb/${draftKb._id}/publish`, { token: maria });
+check('kb publish toggle', r.status === 200 && r.json.data.status === 'published', r.json);
+r = await call('DELETE', `/kb/${draftKb._id}`, { token: maria });
+check('trainer cannot delete kb 403', r.status === 403, r.json);
+r = await call('DELETE', `/kb/${draftKb._id}`, { token: admin });
+check('admin delete kb', r.status === 200, r.json);
+
+// ---------- ANALYTICS (feature 3) ----------
+r = await call('GET', `/analytics/quiz/${csfQuiz}`, { token: juan });
+check('agent cannot view analytics 403', r.status === 403);
+r = await call('GET', `/analytics/quiz/${csfQuiz}`, { token: maria });
+check('quiz analytics: correctRate + optionCounts', r.status === 200 && r.json.data.summary.attempts >= 1 && Array.isArray(r.json.data.questions) && r.json.data.questions[0].optionCounts.length >= 2 && typeof r.json.data.questions[0].correctRate === 'number' && r.json.data.distribution.length === 4, r.json?.data?.summary);
+r = await call('GET', `/analytics/quiz/${csfQuiz}`, { token: paolo });
+check('non-owner trainer analytics 403', r.status === 403, r.json);
+r = await call('GET', `/analytics/course/${csf._id}`, { token: maria });
+check('course analytics funnel + quizzes', r.status === 200 && Array.isArray(r.json.data.lessonFunnel) && Array.isArray(r.json.data.quizzes), r.json?.data);
+const carloId = (await call('GET', '/users?search=mendoza', { token: admin })).json.data[0]._id;
+r = await call('GET', `/analytics/agent/${carloId}`, { token: maria });
+check('agent analytics trends', r.status === 200 && Array.isArray(r.json.data.quizTrend) && r.json.data.quizTrend.length >= 1 && 'weakestCategory' in r.json.data, r.json?.data);
+r = await call('GET', `/analytics/agent/${carloId}`, { token: paolo });
+check('trainer cannot view other-batch agent analytics 403', r.status === 403, r.json);
+
+// ---------- GO-LIVE ENDORSEMENT (feature 5) ----------
+const fayeId = (await call('GET', '/users?search=aquino', { token: admin })).json.data[0]._id;
+r = await call('GET', `/endorsements/eligibility/${fayeId}`, { token: maria });
+// (the quiz section added a 5th course to Wave 12 that Faye hasn't finished, so "courses" legitimately fails here;
+//  her readiness + acknowledged-evaluations merits still pass, proving the eligibility logic)
+check('faye meets readiness + evaluation merits', r.status === 200 && ['readiness', 'evaluations'].every((k) => r.json.data.checklist.find((c) => c.key === k)?.passed), r.json?.data?.checklist);
+r = await call('GET', `/endorsements/eligibility/${fayeId}`, { token: paolo });
+check('other trainer eligibility 403', r.status === 403);
+r = await call('POST', '/endorsements', { token: maria, body: { agentId: carloId, note: 'try' } });
+check('carlo not eligible 400 + checklist', r.status === 400 && Array.isArray(r.json.errors) && r.json.errors.some((c) => c.passed === false), r.json);
+r = await call('POST', '/endorsements', { token: juan, body: { agentId: carloId } });
+check('agent cannot endorse 403', r.status === 403);
+r = await call('GET', '/endorsements?status=pending', { token: admin });
+check('admin lists pending endorsements', r.status === 200 && r.json.data.length >= 1, r.json?.pagination);
+const fayeEndorsement = r.json.data.find((e) => String(e.agent._id) === String(fayeId));
+check('faye pending endorsement (snapshot ≥80)', !!fayeEndorsement && fayeEndorsement.snapshot.readinessScore >= 80, fayeEndorsement?.snapshot);
+r = await call('PATCH', `/endorsements/${fayeEndorsement._id}/approve`, { token: juan });
+check('agent cannot approve 403', r.status === 403);
+r = await call('PATCH', `/endorsements/${fayeEndorsement._id}/approve`, { token: maria });
+check('trainer cannot approve 403', r.status === 403);
+r = await call('PATCH', `/endorsements/${fayeEndorsement._id}/approve`, { token: admin, body: { note: 'Welcome to the floor!' } });
+check('admin approve endorsement', r.status === 200 && r.json.data.status === 'approved', r.json);
+r = await call('GET', `/users/${fayeId}`, { token: admin });
+check('faye now in production', r.status === 200 && r.json.data.productionStatus === 'production' && !!r.json.data.goLiveAt, r.json?.data?.productionStatus);
+r = await call('PATCH', `/endorsements/${fayeEndorsement._id}/reject`, { token: admin, body: { note: '' } });
+check('reject requires a note 422', r.status === 422, r.json);
+
+// ---------- DAILY DRILL (feature 7) ----------
+r = await call('GET', '/drill/today', { token: juan });
+check('drill today', r.status === 200 && Array.isArray(r.json.data.questions) && typeof r.json.data.streak === 'number' && r.json.data.questions.every((q) => q.correctAnswer === undefined), r.json?.data);
+const drillQ1 = JSON.stringify(r.json.data.questions.map((q) => q.questionId));
+const drillCount = r.json.data.questions.length;
+r = await call('GET', '/drill/today', { token: juan });
+check('drill same questions on refresh', JSON.stringify(r.json.data.questions.map((q) => q.questionId)) === drillQ1, r.json?.data);
+r = await call('POST', '/drill/submit', { token: juan, body: { answers: Array(drillCount).fill(0) } });
+check('drill submit returns review + streak', r.status === 201 && Array.isArray(r.json.data.review) && r.json.data.review.length === drillCount && r.json.data.review[0].correctAnswer !== undefined && typeof r.json.data.streak === 'number', r.json?.data);
+r = await call('POST', '/drill/submit', { token: juan, body: { answers: Array(drillCount).fill(0) } });
+check('drill second submit 409', r.status === 409, r.json);
+r = await call('GET', '/drill/today', { token: juan });
+check('drill today completed + review', r.status === 200 && r.json.data.completed === true && Array.isArray(r.json.data.review), r.json?.data);
+r = await call('GET', '/drill/history', { token: juan });
+check('drill history', r.status === 200 && r.json.data.length >= 1, r.json?.data?.length);
+r = await call('GET', '/drill/today', { token: maria });
+check('non-agent drill 403', r.status === 403);
+r = await call('POST', '/auth/register', { body: { firstName: 'Drill', lastName: 'Newbie', email: 'drill.newbie@example.com', password: 'Strong@123', confirmPassword: 'Strong@123' } });
+const newbieTok = r.json.token;
+const newbieId = r.json.user._id;
+r = await call('GET', '/drill/today', { token: newbieTok });
+check('no-courses agent gets empty drill', r.status === 200 && r.json.data.empty === true && r.json.data.questions.length === 0, r.json?.data);
+await call('DELETE', `/users/${newbieId}`, { token: admin });
 
 // cleanup test course
 r = await call('DELETE', `/courses/${tst}`, { token: maria });

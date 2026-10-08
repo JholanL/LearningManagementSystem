@@ -1,13 +1,23 @@
 const Certificate = require('../models/Certificate');
 const User = require('../models/User');
+const Batch = require('../models/Batch');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { paginate, escapeRegex } = require('../utils/query');
 
 // GET /api/certificates/me   (agent)
+// Also returns the holder name and the batch trainer's name for the downloadable PDF.
 exports.getMyCertificates = asyncHandler(async (req, res) => {
   const data = await Certificate.find({ user: req.user._id }).populate('course', 'code title category').sort('-issuedAt');
-  res.json({ success: true, data });
+
+  const holder = `${req.user.firstName} ${req.user.lastName}`;
+  let trainer = null;
+  if (req.user.batch) {
+    const batch = await Batch.findById(req.user.batch).populate('trainer', 'firstName lastName');
+    if (batch?.trainer) trainer = `${batch.trainer.firstName} ${batch.trainer.lastName}`;
+  }
+
+  res.json({ success: true, data, holder, trainer });
 });
 
 // GET /api/certificates?search=&page=&limit=   (admin, trainer) - search by agent name or code

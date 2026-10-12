@@ -415,6 +415,12 @@ a:hover { text-decoration: underline; }
 .drill-opt.is-correct { background: var(--green-soft); }
 .drill-opt.is-wrong { background: var(--red-soft); }
 
+/* Quiz builder: highlight the question opened from analytics (?q=) */
+.q-highlight { box-shadow: 0 0 0 2px var(--brand); transition: box-shadow 0.3s; }
+
+/* Leaderboard rank medal (top 3) */
+.rank-medal { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 0.8125rem; }
+
 /* ---------- Certificates ---------- */
 .cert-card { position: relative; overflow: hidden; }
 .cert-card .cert-ribbon {

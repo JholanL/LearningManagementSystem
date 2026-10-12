@@ -1,6 +1,7 @@
 // Match an agent's spoken answer to one of the scenario's response options.
-// Token overlap (Jaccard) + a small bonus per option keyword that was spoken,
-// plus a direct "option A / letter B / number 2" shortcut.
+// Overlap coefficient (how much of the short spoken phrase matches the option's
+// distinctive words) + a bonus per option keyword spoken, plus a direct
+// "option A / letter B / number 2" shortcut.
 // Returns { best, candidates, confident, viaCommand }.
 
 const STOP_WORDS = new Set([
@@ -10,8 +11,9 @@ const STOP_WORDS = new Set([
   'did', 'have', 'has', 'had', 'please', 'okay', 'ok', 'um', 'uh',
 ]);
 
-const AUTO_THRESHOLD = 0.35; // minimum best score to auto-select
-const LEAD_MARGIN = 0.1; // best must beat runner-up by this much
+const AUTO_THRESHOLD = 0.4; // minimum best score to auto-select
+const LEAD_MARGIN = 0.12; // best must beat runner-up by this much
+const KW_BONUS = 0.2; // added per option keyword found in the spoken text
 
 const normalize = (text = '') =>
   String(text)
@@ -28,12 +30,11 @@ const tokenSet = (text = '') => {
   return set;
 };
 
-function jaccard(a, b) {
-  if (!a.size || !b.size) return 0;
+// Count shared tokens between two sets.
+function intersectionCount(a, b) {
   let inter = 0;
   for (const t of a) if (b.has(t)) inter += 1;
-  const union = a.size + b.size - inter;
-  return union ? inter / union : 0;
+  return inter;
 }
 
 // "option a", "letter b", "number 2", "choice c", or a bare "a"/"b"/"c"/"d".
@@ -63,25 +64,35 @@ export function matchResponse(spoken = '', options = []) {
     return { best: { index: opt.index ?? cmd, score: 1, text: opt.text }, candidates: [], confident: true, viaCommand: true };
   }
 
-  // 2) Score each option by token overlap + keyword bonus.
+  // 2) Score each option: overlap coefficient (relative to the smaller set, so a
+  //    short paraphrase that hits an option's distinctive words scores high) + keywords.
   const spokenSet = tokenSet(spoken);
   const spokenNorm = normalize(spoken);
   const scored = options.map((opt, i) => {
-    let score = jaccard(spokenSet, tokenSet(opt.text));
-    for (const kw of opt.keywords || []) {
-      const k = normalize(kw);
-      if (k && spokenNorm.includes(k)) score += 0.15; // keyword hit bonus
+    const optSet = tokenSet(opt.text);
+    const inter = intersectionCount(spokenSet, optSet);
+    const denom = Math.max(1, Math.min(spokenSet.size, optSet.size));
+    let score = inter / denom;
+    let kw = 0;
+    for (const k of opt.keywords || []) {
+      const key = normalize(k);
+      if (key && spokenNorm.includes(key)) { score += KW_BONUS; kw += 1; }
     }
-    return { index: opt.index ?? i, text: opt.text, score: Math.min(1, Number(score.toFixed(4))) };
+    return { index: opt.index ?? i, text: opt.text, score: Math.min(1, Number(score.toFixed(4))), inter, kw };
   });
 
   scored.sort((a, b) => b.score - a.score);
   const [best, runnerUp] = scored;
-  const confident = best.score >= AUTO_THRESHOLD && best.score - (runnerUp?.score || 0) >= LEAD_MARGIN;
+  // Auto-select only on a clear, grounded win (not a single common-word fluke).
+  const confident =
+    !!best &&
+    best.score >= AUTO_THRESHOLD &&
+    best.score - (runnerUp?.score || 0) >= LEAD_MARGIN &&
+    (best.inter >= 2 || best.kw >= 1);
 
   return {
-    best: best.score > 0 ? best : null,
-    candidates: scored.filter((s) => s.score > 0).slice(0, 3), // for a "Did you mean…?" prompt
+    best: best && best.score > 0 ? { index: best.index, score: best.score, text: best.text } : null,
+    candidates: scored.filter((s) => s.score > 0).slice(0, 3).map((s) => ({ index: s.index, text: s.text, score: s.score })),
     confident,
     viaCommand: false,
   };

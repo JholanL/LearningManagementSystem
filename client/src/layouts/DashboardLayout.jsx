@@ -5,13 +5,12 @@ import { useAuth } from '../context/AuthContext';
 import { NAVIGATION } from '../config/navigation';
 import { fullName, initials, ROLE_LABEL } from '../utils/helpers';
 import NotificationBell from '../components/NotificationBell';
+import BrandMark from '../components/BrandMark';
 
 function Brand() {
   return (
     <Link to="/" className="brand d-flex align-items-center gap-2 text-decoration-none">
-      <span className="brand-mark">
-        <i className="bi bi-headset" />
-      </span>
+      <BrandMark size={38} />
       <span className="brand-text">
         VoiceLink
         <span className="brand-sub">Academy</span>

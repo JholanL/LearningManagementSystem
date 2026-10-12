@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { NAVIGATION } from '../config/navigation';
 import { fullName, initials, ROLE_LABEL } from '../utils/helpers';
 import NotificationBell from '../components/NotificationBell';
+import AdminGlobalSearch from '../components/AdminGlobalSearch';
 import BrandMark from '../components/BrandMark';
 
 function Brand() {

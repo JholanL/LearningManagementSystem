@@ -1,6 +1,10 @@
-// End-to-end API test (177 checks). Requires: npm run seed, then npm run dev in another terminal.
-// Run: npm run test:api   (uses API_URL or http://localhost:5000/api)
+// End-to-end API test (177 checks). Run through `npm run test:api` only.
+// The safe runner starts an isolated server and fixture database first.
 // Note: the test logs in ~20 times, so restart the server between runs (login rate limit = 20 per 15 min).
+if (process.env.VOICELINK_SAFE_API_TEST !== '1') {
+  throw new Error('Refusing to run destructive API tests directly. Use `npm run test:api` with MONGO_TEST_URI configured.');
+}
+
 const BASE = process.env.API_URL || 'http://localhost:5000/api';
 let pass = 0, fail = 0;
 const failures = [];
@@ -29,14 +33,15 @@ const juan = await login('juan.delacruz@voicelink.ph', 'Agent@123');
 const enzo = await login('enzo.bautista@voicelink.ph', 'Agent@123');
 check('logins', admin && maria && paolo && juan && enzo);
 
-let r = await call('POST', '/auth/register', { body: { firstName: 'Test', lastName: 'User', email: 'test.user@example.com', password: 'Weak', confirmPassword: 'Weak' } });
+let r = await call('POST', '/auth/register', { body: { firstName: 'Test', lastName: 'User', email: 'ignored@example.com', password: 'Weak', confirmPassword: 'Weak', phone: '09123456789' } });
 check('register weak password 422', r.status === 422, r.json);
-r = await call('POST', '/auth/register', { body: { firstName: 'Test', lastName: 'User', email: 'test.user@example.com', password: 'Strong@123', confirmPassword: 'Strong@123', role: 'admin', phone: '09171112222' } });
-check('register ok', r.status === 201 && r.json.user.role === 'agent' && !r.json.user.password, r.json);
+r = await call('POST', '/auth/register', { body: { firstName: 'Test', lastName: 'User', email: 'ignored@example.com', password: 'Strong@123', confirmPassword: 'Strong@123', role: 'admin', phone: '09123456789' } });
+check('register ok', r.status === 201 && r.json.user.role === 'agent' && r.json.user.email.endsWith('@voicelink.ph') && !r.json.user.password, r.json);
 const newAgent = r.json.token;
 const newAgentId = r.json.user._id;
-r = await call('POST', '/auth/register', { body: { firstName: 'Test', lastName: 'User', email: 'test.user@example.com', password: 'Strong@123', confirmPassword: 'Strong@123' } });
-check('register duplicate 409', r.status === 409, r.json);
+r = await call('POST', '/auth/register', { body: { firstName: 'Test', lastName: 'User', email: 'ignored@example.com', password: 'Strong@123', confirmPassword: 'Strong@123', phone: '09123456789' } });
+check('register duplicate name gets unique company email', r.status === 201 && r.json.user.email !== 'test.user@voicelink.ph', r.json);
+const duplicateAgentId = r.json.user._id;
 r = await call('POST', '/auth/login', { body: { email: { $gt: '' }, password: 'x' } });
 check('nosql injection login rejected', r.status === 422 || r.status === 401, r.json);
 r = await call('GET', '/auth/me');
@@ -72,21 +77,23 @@ check('agent cannot create course 403', r.status === 403);
 // ---------- USERS (admin) ----------
 r = await call('GET', '/users?search=dela&page=1&limit=5', { token: admin });
 check('users search', r.status === 200 && r.json.data.length === 1 && r.json.pagination.total === 1, r.json);
+r = await call('GET', '/users?search=Paolo%20Reyes&page=1&limit=5', { token: admin });
+check('users full-name search', r.status === 200 && r.json.data.some((user) => user.firstName === 'Paolo' && user.lastName === 'Reyes'), r.json);
+r = await call('GET', '/users?search=%20%20paolo%20%20reyes%20&page=1&limit=5', { token: admin });
+check('users normalized full-name search', r.status === 200 && r.json.data.some((user) => user.firstName === 'Paolo' && user.lastName === 'Reyes'), r.json);
 r = await call('GET', '/users?role=agent&limit=3&page=2', { token: admin });
 check('users pagination', r.status === 200 && r.json.data.length === 3 && r.json.pagination.totalPages === 4, r.json?.pagination);
 r = await call('GET', '/users?search=(((', { token: admin });
 check('regex escape', r.status === 200, r.json);
-r = await call('POST', '/users', { token: admin, body: { firstName: 'New', lastName: 'Trainer', email: 'new.trainer@voicelink.ph', password: 'Trainer@123', role: 'trainer' } });
+r = await call('POST', '/users', { token: admin, body: { firstName: 'New', lastName: 'Trainer', password: 'Trainer@123', role: 'trainer', phone: '09123456780' } });
 check('admin create trainer', r.status === 201, r.json);
 const newTrainerId = r.json.data._id;
 r = await call('GET', '/users/notanid', { token: admin });
 check('invalid id 400/422', r.status === 422, r.json);
 r = await call('PATCH', `/users/${newAgentId}/status`, { token: admin });
 check('deactivate', r.status === 200 && r.json.data.isActive === false);
-r = await call('POST', '/auth/login', { body: { email: 'test.user@example.com', password: 'Newer@1234' } });
+r = await call('POST', '/auth/login', { body: { email: 'test.user@voicelink.ph', password: 'Newer@1234' } });
 check('deactivated cannot login', r.status === 403, r.json);
-r = await call('DELETE', `/users/${newAgentId}`, { token: admin });
-check('delete user', r.status === 200);
 r = await call('DELETE', `/users/${newTrainerId}`, { token: admin });
 check('delete trainer', r.status === 200);
 
@@ -118,13 +125,23 @@ check('create batch', r.status === 201, r.json);
 const wave14 = r.json.data._id;
 r = await call('PUT', `/batches/${wave14}`, { token: admin, body: { status: 'ongoing' } });
 check('update batch', r.status === 200 && r.json.data.status === 'ongoing', r.json);
+let wave14Version = r.json.data.membershipVersion ?? 0;
 const allAgents = (await call('GET', '/users?role=agent&batch=' + wave13._id, { token: admin })).json.data;
-r = await call('PUT', `/batches/${wave14}/agents`, { token: admin, body: { agentIds: [allAgents[0]._id] } });
+r = await call('PUT', `/batches/${wave14}/agents`, { token: admin, body: { agentIds: [newAgentId], membershipVersion: wave14Version } });
 check('set agents', r.status === 200, r.json);
-r = await call('PUT', `/batches/${wave14}/agents`, { token: admin, body: { agentIds: [wave12.trainer._id] } });
+wave14Version = r.json.data.membershipVersion;
+r = await call('PUT', `/batches/${wave14}/agents`, { token: admin, body: { agentIds: [allAgents[0]._id], membershipVersion: wave14Version } });
+check('cross-batch assignment rejected', r.status === 409, r.json);
+r = await call('PUT', `/batches/${wave14}/agents`, { token: admin, body: { agentIds: [newAgentId], membershipVersion: wave14Version - 1 } });
+check('stale membership update rejected', r.status === 409, r.json);
+r = await call('PUT', `/batches/${wave14}/agents`, { token: admin, body: { agentIds: [wave12.trainer._id], membershipVersion: wave14Version } });
 check('set agents rejects non-agent', r.status === 400, r.json);
 r = await call('DELETE', `/batches/${wave14}`, { token: admin });
 check('delete batch', r.status === 200);
+r = await call('DELETE', `/users/${newAgentId}`, { token: admin });
+check('delete temporary registered agent', r.status === 200);
+r = await call('DELETE', `/users/${duplicateAgentId}`, { token: admin });
+check('delete duplicate-name agent', r.status === 200);
 
 // ---------- COURSES ----------
 r = await call('GET', '/courses', { token: admin });
@@ -485,7 +502,7 @@ r = await call('GET', '/drill/history', { token: juan });
 check('drill history', r.status === 200 && r.json.data.length >= 1, r.json?.data?.length);
 r = await call('GET', '/drill/today', { token: maria });
 check('non-agent drill 403', r.status === 403);
-r = await call('POST', '/auth/register', { body: { firstName: 'Drill', lastName: 'Newbie', email: 'drill.newbie@example.com', password: 'Strong@123', confirmPassword: 'Strong@123' } });
+r = await call('POST', '/auth/register', { body: { firstName: 'Drill', lastName: 'Newbie', email: 'ignored@example.com', password: 'Strong@123', confirmPassword: 'Strong@123', phone: '09123456781' } });
 const newbieTok = r.json.token;
 const newbieId = r.json.user._id;
 r = await call('GET', '/drill/today', { token: newbieTok });

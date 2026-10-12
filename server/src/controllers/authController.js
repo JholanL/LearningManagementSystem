@@ -4,13 +4,13 @@ const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { generateToken } = require('../utils/token');
 const { audit } = require('../services/auditService');
+const { createUserWithGeneratedEmail } = require('../services/companyEmailService');
 
 // POST /api/auth/register  (public) - self-registration is always an AGENT account
 exports.register = asyncHandler(async (req, res) => {
-  const data = pick(req.body, ['firstName', 'lastName', 'email', 'password', 'employeeId', 'phone']);
-  if (await User.exists({ email: data.email })) throw new ApiError(409, 'Email is already registered.');
+  const data = pick(req.body, ['firstName', 'lastName', 'password', 'employeeId', 'phone']);
 
-  const user = await User.create({ ...data, role: 'agent' });
+  const user = await createUserWithGeneratedEmail({ ...data, role: 'agent' });
   res.status(201).json({ success: true, message: 'Account created.', token: generateToken(user), user });
 });
 

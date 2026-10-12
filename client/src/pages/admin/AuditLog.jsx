@@ -14,6 +14,47 @@ import usePaginatedList from '../../hooks/usePaginatedList';
 import { auditApi } from '../../api/services';
 import { formatDateTime } from '../../utils/helpers';
 
+const ACTION_LABELS = {
+  'auth.login': 'Successful Login',
+  'auth.login_failed': 'Failed Login Attempt',
+  'auth.logout': 'Logout',
+  'auth.locked': 'Account Locked',
+  'auth.password_changed': 'Password Changed',
+  'user.create': 'User Created',
+  'user.update': 'User Updated',
+  'user.delete': 'User Deleted',
+  'user.status': 'User Status Changed',
+  'user.unlock': 'Account Unlocked',
+  'batch.create': 'Batch Created',
+  'batch.update': 'Batch Updated',
+  'batch.delete': 'Batch Deleted',
+  'batch.members': 'Batch Members Updated',
+  'course.create': 'Course Created',
+  'course.update': 'Course Updated',
+  'course.publish': 'Course Published',
+  'course.delete': 'Course Deleted',
+  'endorsement.request': 'Endorsement Requested',
+  'endorsement.approve': 'Endorsement Approved',
+  'endorsement.reject': 'Endorsement Rejected',
+  'endorsement.revoke': 'Endorsement Revoked',
+  'evaluation.create': 'Evaluation Created',
+  'kb.publish': 'Knowledge Base Article Published',
+  'kb.delete': 'Knowledge Base Article Deleted',
+};
+
+function actionLabel(action = '') {
+  const normalized = String(action).trim();
+  if (!normalized) return 'Unknown Action';
+  if (ACTION_LABELS[normalized]) return ACTION_LABELS[normalized];
+
+  const fallback = normalized
+    .replace(/[._-]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  return fallback || 'Unknown Action';
+}
+
 // Pick a badge tone from the action name.
 function actionTone(action = '') {
   if (/failed|locked|delete/.test(action)) return 'badge-red';
@@ -53,7 +94,7 @@ export default function AuditLog() {
               <Form.Select value={list.filters.action} onChange={(e) => list.setFilter('action', e.target.value)} aria-label="Filter by action">
                 <option value="">All actions</option>
                 {actions.map((a) => (
-                  <option key={a} value={a}>{a}</option>
+                  <option key={a} value={a}>{actionLabel(a)}</option>
                 ))}
               </Form.Select>
             </Col>
@@ -96,7 +137,7 @@ export default function AuditLog() {
                         <div className="fw-semibold">{log.actorName}</div>
                         <span className={`badge-tone ${ROLE_TONE[log.actorRole] || 'badge-gray'}`}>{log.actorRole}</span>
                       </td>
-                      <td><span className={`badge-tone ${actionTone(log.action)}`}>{log.action}</span></td>
+                      <td><span className={`badge-tone ${actionTone(log.action)}`}>{actionLabel(log.action)}</span></td>
                       <td className="small">
                         {log.targetLabel ? (
                           <>
@@ -137,7 +178,7 @@ export default function AuditLog() {
                 </Col>
                 <Col sm={6}>
                   <dt>Action</dt>
-                  <dd><span className={`badge-tone ${actionTone(selected.action)}`}>{selected.action}</span></dd>
+                  <dd><span className={`badge-tone ${actionTone(selected.action)}`}>{actionLabel(selected.action)}</span></dd>
                 </Col>
                 <Col sm={6}>
                   <dt>Target</dt>

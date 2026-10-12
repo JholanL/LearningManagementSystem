@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Route, Routes } from 'react-router-dom';
+import { Navigate, Route, Routes } from 'react-router-dom';
 import ProtectedRoute, { GuestRoute, HomeRedirect } from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -19,11 +19,12 @@ const ManageUsers = lazy(() => import('./pages/admin/ManageUsers'));
 const ManageBatches = lazy(() => import('./pages/admin/ManageBatches'));
 const BatchMembers = lazy(() => import('./pages/admin/BatchMembers'));
 const ManageCertificates = lazy(() => import('./pages/admin/ManageCertificates'));
+const AdminLeaderboard = lazy(() => import('./pages/admin/AdminLeaderboard'));
 const AuditLog = lazy(() => import('./pages/admin/AuditLog'));
 const Endorsements = lazy(() => import('./pages/admin/Endorsements'));
 const VoiceCheck = lazy(() => import('./pages/dev/VoiceCheck'));
 
-// Trainer (Course/Quiz builders are shared with admin)
+// Trainer
 const TrainerDashboard = lazy(() => import('./pages/trainer/TrainerDashboard'));
 const TrainerBatches = lazy(() => import('./pages/trainer/TrainerBatches'));
 const BatchProgress = lazy(() => import('./pages/trainer/BatchProgress'));
@@ -76,13 +77,13 @@ export default function App() {
             <Route path="users" element={<ManageUsers />} />
             <Route path="batches" element={<ManageBatches />} />
             <Route path="batches/:id" element={<BatchMembers />} />
-            <Route path="courses" element={<TrainerCourses />} />
-            <Route path="courses/:id" element={<CourseBuilder />} />
-            <Route path="courses/:courseId/quizzes/new" element={<QuizBuilder />} />
-            <Route path="quizzes/:id" element={<QuizBuilder />} />
-            <Route path="quizzes/:id/analytics" element={<QuizAnalytics />} />
+            <Route path="courses" element={<Navigate to="/admin/batches" replace />} />
+            <Route path="courses/:courseId/quizzes/new" element={<Navigate to="/admin/batches" replace />} />
+            <Route path="courses/:id" element={<Navigate to="/admin/batches" replace />} />
+            <Route path="quizzes/:id" element={<Navigate to="/admin/batches" replace />} />
+            <Route path="quizzes/:id/analytics" element={<Navigate to="/admin/batches" replace />} />
             <Route path="certificates" element={<ManageCertificates />} />
-            <Route path="leaderboard" element={<Leaderboard />} />
+            <Route path="leaderboard" element={<AdminLeaderboard />} />
             <Route path="audit-logs" element={<AuditLog />} />
             <Route path="kb" element={<ManageKnowledgeBase />} />
             <Route path="endorsements" element={<Endorsements />} />

@@ -11,6 +11,7 @@
  */
 import { useEffect, useState } from 'react';
 import { Badge, Button, Card, Col, Form, Modal, Row, Spinner, Table } from 'react-bootstrap';
+import { Link } from 'react-router-dom';
 import PageHeader from '../../components/PageHeader';
 import SearchBar from '../../components/SearchBar';
 import PaginationBar from '../../components/PaginationBar';
@@ -205,6 +206,9 @@ export default function ManageBatches() {
                         <StatusBadge status={b.status} />
                       </td>
                       <td className="text-end text-nowrap">
+                        <Button as={Link} to={`/admin/batches/${b._id}`} size="sm" variant="light" className="me-1" aria-label={`Manage members for ${b.name}`}>
+                          <i className="bi bi-people" />
+                        </Button>
                         <Button size="sm" variant="light" className="me-1" onClick={() => openEdit(b)} aria-label={`Edit ${b.name}`}>
                           <i className="bi bi-pencil" />
                         </Button>

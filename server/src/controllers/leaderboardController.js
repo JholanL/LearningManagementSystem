@@ -5,6 +5,24 @@ const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const { computeReadiness, WEIGHTS } = require('../services/readinessService');
 
+function compareLeaderboardRows(left, right) {
+  const scoreDifference = right.readinessScore - left.readinessScore;
+  if (scoreDifference) return scoreDifference;
+
+  const leftEmployeeId = String(left.agent?.employeeId || '').trim().toUpperCase();
+  const rightEmployeeId = String(right.agent?.employeeId || '').trim().toUpperCase();
+  if (leftEmployeeId || rightEmployeeId) {
+    if (!leftEmployeeId) return 1;
+    if (!rightEmployeeId) return -1;
+    const employeeDifference = leftEmployeeId.localeCompare(rightEmployeeId, undefined, { numeric: true });
+    if (employeeDifference) return employeeDifference;
+  }
+
+  // Employee IDs are unique, but keep a final stable tie-breaker for legacy records
+  // that may not have one.
+  return String(left.agent?._id).localeCompare(String(right.agent?._id));
+}
+
 // GET /api/leaderboard?batch=<id>
 // Agent: always their own batch. Trainer: own batches. Admin: any batch.
 exports.getLeaderboard = asyncHandler(async (req, res) => {
@@ -37,7 +55,7 @@ exports.getLeaderboard = asyncHandler(async (req, res) => {
     };
   });
 
-  rows.sort((a, b) => b.readinessScore - a.readinessScore || b.coursesCompleted - a.coursesCompleted);
+  rows.sort(compareLeaderboardRows);
   rows.forEach((r, i) => (r.rank = i + 1));
 
   res.json({
@@ -45,3 +63,5 @@ exports.getLeaderboard = asyncHandler(async (req, res) => {
     data: { batch: { _id: batch._id, name: batch.name, account: batch.account }, weights: WEIGHTS, rows },
   });
 });
+
+exports.compareLeaderboardRows = compareLeaderboardRows;

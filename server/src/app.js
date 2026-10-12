@@ -52,6 +52,7 @@ app.use('/api', async (_req, _res, next) => {
 // ---------- Routes ----------
 app.get('/api/health', (_req, res) => res.json({ success: true, message: 'VoiceLink Academy API is running' }));
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/admin/search', require('./routes/adminSearchRoutes'));
 app.use('/api/users', require('./routes/userRoutes'));
 app.use('/api/batches', require('./routes/batchRoutes'));
 app.use('/api/courses', require('./routes/courseRoutes'));

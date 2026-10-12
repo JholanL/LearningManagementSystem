@@ -10,6 +10,8 @@ const batchSchema = new mongoose.Schema(
     description: { type: String, trim: true, maxlength: 500 },
     trainer: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     courses: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Course' }],
+    // Optimistic concurrency token for complete membership replacements.
+    membershipVersion: { type: Number, default: 0, min: 0 },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     status: { type: String, enum: ['upcoming', 'ongoing', 'completed'], default: 'upcoming' },

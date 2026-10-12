@@ -5,6 +5,7 @@ const Scenario = require('../models/Scenario');
 const QuizAttempt = require('../models/QuizAttempt');
 const ScenarioAttempt = require('../models/ScenarioAttempt');
 const Certificate = require('../models/Certificate');
+const Endorsement = require('../models/Endorsement');
 const Evaluation = require('../models/Evaluation');
 const Progress = require('../models/Progress');
 const asyncHandler = require('../utils/asyncHandler');
@@ -20,13 +21,14 @@ const countBy = (items, key) =>
 
 // GET /api/dashboard/admin
 exports.adminDashboard = asyncHandler(async (_req, res) => {
-  const [users, batches, courses, scenarioCount, certificateCount, recentUsers, recentCertificates] = await Promise.all([
+  const [users, batches, courses, scenarioCount, certificateCount, pendingEndorsements, recentUsers, recentCertificates] = await Promise.all([
     User.find().select('role isActive'),
     Batch.find().select('status'),
     Course.find().select('category isPublished'),
     Scenario.countDocuments(),
     Certificate.countDocuments(),
-    User.find().sort('-createdAt').limit(5).select('firstName lastName email role createdAt'),
+    Endorsement.countDocuments({ status: 'pending' }),
+    User.find().sort('-createdAt').limit(5).select('firstName lastName email role isActive createdAt'),
     Certificate.find()
       .sort('-issuedAt')
       .limit(5)
@@ -50,6 +52,7 @@ exports.adminDashboard = asyncHandler(async (_req, res) => {
       },
       scenarios: scenarioCount,
       certificatesIssued: certificateCount,
+      pendingEndorsements,
       recentUsers,
       recentCertificates,
     },

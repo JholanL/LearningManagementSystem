@@ -194,6 +194,32 @@ a:hover { text-decoration: underline; }
 .topbar-search .form-control { background: var(--canvas); border-color: transparent; padding-left: 2.25rem; }
 .topbar-search .form-control:focus { background: #fff; border-color: rgba(var(--brand-rgb), 0.5); }
 .topbar-search .bi { position: absolute; left: 0.75rem; top: 50%; transform: translateY(-50%); color: var(--ink-400); pointer-events: none; }
+.admin-global-search .form-control { padding-right: 2.5rem; }
+.admin-global-search-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  z-index: 1050;
+  width: min(430px, 92vw);
+  max-height: min(70vh, 480px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 0.75rem;
+  box-shadow: 0 0.75rem 2rem rgba(10, 22, 40, 0.16);
+  padding: 0.4rem 0;
+}
+.admin-global-search-menu .bi { position: static; transform: none; pointer-events: none; }
+.admin-search-group-title { padding: 0.55rem 0.85rem 0.35rem; color: var(--ink-500); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; }
+.admin-search-item { display: flex; align-items: center; gap: 0.7rem; width: 100%; padding: 0.6rem 0.85rem; border: 0; background: transparent; color: var(--ink-900); text-align: left; }
+.admin-search-item:hover, .admin-search-item.is-active { background: var(--canvas); }
+.admin-search-item-icon { display: grid; place-items: center; flex: 0 0 2rem; width: 2rem; height: 2rem; border-radius: 0.5rem; background: rgba(var(--brand-rgb), 0.1); color: var(--brand); }
+.admin-search-item-title { font-size: 0.88rem; font-weight: 600; }
+.admin-search-item-subtitle { color: var(--ink-500); font-size: 0.75rem; }
+.admin-search-message { padding: 0.9rem 0.85rem; color: var(--ink-500); font-size: 0.85rem; }
+.admin-search-clear { position: absolute; top: 50%; right: 0.45rem; z-index: 1; width: 1.75rem; height: 1.75rem; transform: translateY(-50%); border: 0; border-radius: 50%; background: transparent; color: var(--ink-500); }
+.admin-search-clear:hover { background: var(--canvas); color: var(--ink-900); }
+.admin-search-clear .bi { position: static; transform: none; pointer-events: none; }
 .topbar-bell {
   position: relative; width: 40px; height: 40px; border-radius: var(--radius-btn);
   border: 1px solid var(--border); background: #fff; color: var(--ink-600);

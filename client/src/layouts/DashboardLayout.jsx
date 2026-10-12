@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { NAVIGATION } from '../config/navigation';
 import { fullName, initials, ROLE_LABEL } from '../utils/helpers';
 import NotificationBell from '../components/NotificationBell';
+import AdminGlobalSearch from '../components/AdminGlobalSearch';
 
 function Brand() {
   return (
@@ -122,11 +123,15 @@ export default function DashboardLayout() {
           </div>
 
           <div className="ms-auto d-flex align-items-center gap-2 gap-md-3">
-            <div className="topbar-search position-relative d-none d-md-block">
-              <i className="bi bi-search" />
-              <input type="search" className="form-control" placeholder="Search..." aria-label="Search" />
-            </div>
-            <NotificationBell />
+            {user.role === 'admin' ? (
+              <AdminGlobalSearch />
+            ) : (
+              <div className="topbar-search position-relative d-none d-md-block">
+                <i className="bi bi-search" />
+                <input type="search" className="form-control" placeholder="Search..." aria-label="Search" />
+              </div>
+            )}
+            {user.role !== 'admin' && <NotificationBell />}
             <Dropdown align="end">
               <Dropdown.Toggle variant="link" className="user-toggle d-flex align-items-center gap-2 text-decoration-none">
                 <Avatar user={user} />

@@ -5,7 +5,8 @@ import AuthLayout from '../../layouts/AuthLayout';
 import { useAuth } from '../../context/AuthContext';
 import { useToast } from '../../context/ToastContext';
 import { getErrorMessage, getFieldErrors } from '../../utils/helpers';
-import { isEmail, isName, isPhPhone, passwordIssues, required, validate } from '../../utils/validators';
+import { buildCompanyEmail } from '../../utils/companyEmail';
+import { isName, isPhPhone, passwordIssues, required, validate } from '../../utils/validators';
 
 const EMPTY = { firstName: '', lastName: '', email: '', employeeId: '', phone: '', password: '', confirmPassword: '' };
 
@@ -19,7 +20,10 @@ export default function Register() {
   const [submitting, setSubmitting] = useState(false);
 
   const onChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+    const nextForm = { ...form, [name]: value };
+    if (name === 'firstName' || name === 'lastName') nextForm.email = buildCompanyEmail(nextForm.firstName, nextForm.lastName);
+    setForm(nextForm);
     setErrors({ ...errors, [e.target.name]: undefined });
   };
 
@@ -30,7 +34,6 @@ export default function Register() {
     const found = validate(form, {
       firstName: [required('First name'), [isName, 'Letters only, max 50']],
       lastName: [required('Last name'), [isName, 'Letters only, max 50']],
-      email: [required('Email'), [isEmail, 'Enter a valid email']],
       employeeId: [[(v) => !v || /^[A-Za-z0-9-]{3,20}$/.test(v), '3-20 letters, numbers or dashes']],
       phone: [[isPhPhone, 'Use 09XXXXXXXXX format']],
       password: [required('Password'), [(v) => passwordIssues(v).length === 0, 'Password does not meet the requirements']],
@@ -69,7 +72,7 @@ export default function Register() {
           <Col sm={6}>{field('firstName', 'First name', { autoComplete: 'given-name' })}</Col>
           <Col sm={6}>{field('lastName', 'Last name', { autoComplete: 'family-name' })}</Col>
         </Row>
-        {field('email', 'Email', { type: 'email', autoComplete: 'email' })}
+        {field('email', 'Company email', { type: 'email', autoComplete: 'email', readOnly: true, placeholder: 'Generated from your name' })}
         <Row>
           <Col sm={6}>{field('employeeId', 'Employee ID (optional)', { placeholder: 'VL-2010' })}</Col>
           <Col sm={6}>{field('phone', 'Mobile (optional)', { placeholder: '09XXXXXXXXX', inputMode: 'tel' })}</Col>

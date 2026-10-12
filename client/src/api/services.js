@@ -36,7 +36,7 @@ export const batchesApi = {
   get: (id) => unwrap(api.get(`/batches/${id}`)), // includes agents[] and courses[]
   create: (data) => unwrap(api.post('/batches', data)),
   update: (id, data) => unwrap(api.put(`/batches/${id}`, data)),
-  setAgents: (id, agentIds) => unwrap(api.put(`/batches/${id}/agents`, { agentIds })),
+  setAgents: (id, agentIds, membershipVersion) => unwrap(api.put(`/batches/${id}/agents`, { agentIds, membershipVersion })),
   remove: (id) => unwrap(api.delete(`/batches/${id}`)),
 };
 
@@ -113,6 +113,11 @@ export const dashboardApi = {
   agent: () => unwrap(api.get('/dashboard/agent')),
 };
 
+/* ---------------- ADMIN GLOBAL SEARCH ---------------- */
+export const adminSearchApi = {
+  search: (query, config = {}) => unwrap(api.get('/admin/search', { params: { q: query }, ...config })),
+};
+
 export const leaderboardApi = {
   get: (batchId) => unwrap(api.get('/leaderboard', { params: batchId ? { batch: batchId } : {} })),
 };
@@ -132,7 +137,12 @@ export const notificationsApi = {
 
 /* ---------------- AUDIT LOG (admin) ---------------- */
 export const auditApi = {
-  list: (params) => unwrap(api.get('/audit-logs', { params })), // filters: search, action, actor, from, to
+  list: (params = {}) => {
+    const cleanParams = Object.fromEntries(
+      Object.entries(params).filter(([, value]) => value !== '' && value !== undefined && value !== null),
+    );
+    return unwrap(api.get('/audit-logs', { params: cleanParams }));
+  }, // filters: search, action, actor, from, to
   actions: () => unwrap(api.get('/audit-logs/actions')), // distinct action names for the filter dropdown
 };
 

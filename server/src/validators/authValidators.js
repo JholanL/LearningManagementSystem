@@ -4,7 +4,6 @@ const { strongPassword, name, phPhone, optionalUrl } = require('./common');
 const register = [
   name('firstName', 'First name'),
   name('lastName', 'Last name'),
-  body('email').trim().isEmail().withMessage('Valid email is required').toLowerCase(),
   strongPassword('password'),
   body('confirmPassword')
     .custom((value, { req }) => value === req.body.password)

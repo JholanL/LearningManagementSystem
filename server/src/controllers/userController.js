@@ -8,10 +8,44 @@ const Evaluation = require('../models/Evaluation');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
-const { paginate, searchFilter } = require('../utils/query');
+const { escapeRegex, paginate } = require('../utils/query');
 const { audit } = require('../services/auditService');
+const { createUserWithEmployeeId } = require('../services/employeeIdService');
 
-const FIELDS = ['firstName', 'lastName', 'email', 'password', 'role', 'employeeId', 'phone', 'avatarUrl', 'batch', 'isActive'];
+const CREATE_FIELDS = ['firstName', 'lastName', 'password', 'role', 'phone', 'avatarUrl', 'batch', 'isActive'];
+const UPDATE_FIELDS = ['firstName', 'lastName', 'password', 'role', 'phone', 'avatarUrl', 'batch', 'isActive'];
+
+function buildUserSearchFilter(search) {
+  const normalized = String(search || '').trim().replace(/\s+/g, ' ');
+  if (!normalized) return {};
+
+  const regex = new RegExp(escapeRegex(normalized), 'i');
+  return {
+    $or: [
+      { firstName: regex },
+      { lastName: regex },
+      { email: regex },
+      { employeeId: regex },
+      {
+        $expr: {
+          $regexMatch: {
+            input: { $concat: ['$firstName', ' ', '$lastName'] },
+            regex: escapeRegex(normalized),
+            options: 'i',
+          },
+        },
+      },
+    ],
+  };
+}
+
+function serializeAdminUser(user) {
+  const data = user.toJSON();
+  // Uses the same User virtual checked by authentication; lockUntil itself stays private.
+  delete data.isLocked;
+  data.isLoginLocked = user.isLocked;
+  return data;
+}
 
 async function assertValidBatch(batchId, role) {
   if (!batchId) return;
@@ -22,13 +56,16 @@ async function assertValidBatch(batchId, role) {
 // GET /api/users?search=&role=&batch=&isActive=&page=&limit=   (admin)
 exports.getUsers = asyncHandler(async (req, res) => {
   const { search, role, batch, isActive } = req.query;
-  const filter = { ...searchFilter(search, ['firstName', 'lastName', 'email', 'employeeId']) };
+  const filter = { ...buildUserSearchFilter(search) };
   if (role) filter.role = role;
   if (batch) filter.batch = batch === 'none' ? null : batch;
   if (isActive !== undefined && isActive !== '') filter.isActive = isActive === 'true';
 
-  const result = await paginate(User, filter, req.query, { populate: { path: 'batch', select: 'name account' } });
-  res.json({ success: true, ...result });
+  const result = await paginate(User, filter, req.query, {
+    populate: { path: 'batch', select: 'name account' },
+    select: '+lockUntil',
+  });
+  res.json({ success: true, ...result, data: result.data.map(serializeAdminUser) });
 });
 
 // GET /api/users/:id   (admin)
@@ -38,12 +75,12 @@ exports.getUser = asyncHandler(async (req, res) => {
   res.json({ success: true, data: user });
 });
 
-// POST /api/users   (admin) - create admin / trainer / agent
+// POST /api/users   (admin) - create trainer / agent
 exports.createUser = asyncHandler(async (req, res) => {
-  const data = pick(req.body, FIELDS);
+  const data = pick(req.body, CREATE_FIELDS);
+  if (data.role === 'admin') throw new ApiError(403, 'Creating additional administrator accounts is not allowed.');
   await assertValidBatch(data.batch, data.role);
-  if (await User.exists({ email: data.email })) throw new ApiError(409, 'Email is already registered.');
-  const user = await User.create(data);
+  const user = await createUserWithEmployeeId(data);
   await audit(req, { action: 'user.create', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}`, metadata: { role: user.role } });
   res.status(201).json({ success: true, message: 'User created.', data: user });
 });
@@ -53,8 +90,11 @@ exports.updateUser = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id).select('+tokenVersion');
   if (!user) throw new ApiError(404, 'User not found');
 
-  const updates = pick(req.body, FIELDS);
+  const updates = pick(req.body, UPDATE_FIELDS);
   const isSelf = String(user._id) === String(req.user._id);
+  if (updates.role === 'admin' && user.role !== 'admin') {
+    throw new ApiError(403, 'Trainer and agent accounts cannot be changed to administrator.');
+  }
   if (isSelf && updates.role && updates.role !== 'admin') throw new ApiError(400, 'You cannot remove your own admin role.');
   if (isSelf && updates.isActive === false) throw new ApiError(400, 'You cannot deactivate your own account.');
 

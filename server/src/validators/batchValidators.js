@@ -23,6 +23,9 @@ const batchBody = (isUpdate = false) => {
 const setAgents = [
   body('agentIds').isArray().withMessage('agentIds must be an array'),
   body('agentIds.*').isMongoId().withMessage('Invalid agent id'),
+  body('membershipVersion')
+    .isInt({ min: 0 })
+    .withMessage('A valid membership version is required. Refresh the batch and try again.'),
 ];
 
 module.exports = { createBatch: batchBody(false), updateBatch: batchBody(true), setAgents };

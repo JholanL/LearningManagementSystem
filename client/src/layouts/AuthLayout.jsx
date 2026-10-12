@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import BrandMark from '../components/BrandMark';
 
 const YEAR = new Date().getFullYear();
 
@@ -14,9 +15,7 @@ export default function AuthLayout({ title, subtitle, children }) {
     <div className="auth-page">
       <aside className="auth-hero d-none d-lg-flex">
         <div className="auth-hero-inner">
-          <div className="brand-mark brand-mark-lg mb-4">
-            <i className="bi bi-headset" />
-          </div>
+          <BrandMark size={56} className="mb-4" />
           <div className="auth-overline">VoiceLink Solutions · Agent Academy</div>
           <h2 className="display-6 fw-bold mb-3">
             Train agents who are <span className="text-accent">ready for the floor.</span>
@@ -46,9 +45,7 @@ export default function AuthLayout({ title, subtitle, children }) {
       <section className="auth-form-side">
         <div className="auth-card">
           <Link to="/" className="d-inline-flex align-items-center gap-2 text-decoration-none mb-4 d-lg-none">
-            <span className="brand-mark">
-              <i className="bi bi-headset" />
-            </span>
+            <BrandMark size={38} />
             <span className="fw-bold text-body">VoiceLink Academy</span>
           </Link>
           <h1 className="h3 fw-bold mb-1">{title}</h1>

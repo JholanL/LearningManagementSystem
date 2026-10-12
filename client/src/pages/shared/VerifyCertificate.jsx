@@ -3,6 +3,7 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import { Alert, Button, Card, Form, InputGroup, Spinner } from 'react-bootstrap';
 import { certificatesApi } from '../../api/services';
 import { formatDate, getErrorMessage } from '../../utils/helpers';
+import BrandMark from '../../components/BrandMark';
 
 // PUBLIC page: anyone (e.g. an employer) can check if a certificate code is real.  /verify/VLA-2026-ABC123
 export default function VerifyCertificate() {
@@ -34,9 +35,7 @@ export default function VerifyCertificate() {
     <div className="verify-page d-flex align-items-center justify-content-center px-3 py-5">
       <div className="w-100" style={{ maxWidth: 520 }}>
         <Link to="/" className="d-inline-flex align-items-center gap-2 text-decoration-none mb-4">
-          <span className="brand-mark">
-            <i className="bi bi-headset" />
-          </span>
+          <BrandMark size={38} />
           <span className="fw-bold text-body">VoiceLink Academy</span>
         </Link>
         <Card>

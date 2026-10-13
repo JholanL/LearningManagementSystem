@@ -468,13 +468,27 @@ a:hover { text-decoration: underline; }
 /* ---------- Auth pages ---------- */
 .auth-page { display: flex; min-height: 100vh; }
 .auth-hero {
+  position: relative; overflow: hidden; isolation: isolate;
   width: 620px; flex-shrink: 0; color: #fff; padding: 3.5rem 3rem; align-items: center;
+  background: var(--navy-950);
+}
+/* Navy tint over the slideshow keeps the white text readable */
+.auth-hero::after {
+  content: ''; position: absolute; inset: 0; z-index: -1;
   background:
     radial-gradient(circle at 18% 18%, rgba(59, 130, 246, 0.25), transparent 45%),
     radial-gradient(circle at 85% 85%, rgba(29, 78, 216, 0.35), transparent 42%),
-    var(--navy-950);
+    linear-gradient(180deg, rgba(11, 18, 38, 0.55), rgba(11, 18, 38, 0.8));
 }
 @media (max-width: 1199.98px) { .auth-hero { width: 46%; } }
+.auth-slides { position: absolute; inset: 0; z-index: -2; }
+.auth-slide {
+  position: absolute; inset: 0; background-size: cover; background-position: center;
+  opacity: 0; transform: scale(1.06);
+  transition: opacity 1.6s ease, transform 7s ease-out;
+}
+.auth-slide.is-active { opacity: 0.35; transform: scale(1); }
+@media (prefers-reduced-motion: reduce) { .auth-slide { transition: none; transform: none; } }
 .auth-hero-inner { max-width: 460px; margin: 0 auto; width: 100%; }
 .auth-overline { color: var(--accent); font-size: 0.6875rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 1rem; }
 .auth-tiles { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem; }

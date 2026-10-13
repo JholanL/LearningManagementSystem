@@ -7,15 +7,15 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Alert, Badge, Button, Card, Col, Modal, Row, Spinner } from 'react-bootstrap';
+import { Alert, Badge, Button, Card, Col, Form, Modal, Row, Spinner } from 'react-bootstrap';
 import PageHeader from '../../components/PageHeader';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import EmptyState from '../../components/EmptyState';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { scenariosApi } from '../../api/services';
 import { getErrorMessage } from '../../utils/helpers';
 import useVoice from '../../hooks/useVoice';
-import { matchResponse } from '../../utils/matchResponse';
 import { deadAirLevel } from '../../utils/deliveryMetrics';
 import KnowledgeBaseDrawer from '../../components/KnowledgeBaseDrawer';
 
@@ -27,6 +27,13 @@ export default function PlayScenario() {
   const navigate = useNavigate();
   const toast = useToast();
   const voice = useVoice();
+  const { user } = useAuth();
+
+  // The batch's call channel decides which answer modes are allowed.
+  const channel = user?.batch?.channel || 'blended'; // 'voice' | 'non_voice' | 'blended'
+  const voiceUnsupported = !voice.isSupported;
+  const allowVoice = (channel === 'voice' || channel === 'blended') && !voiceUnsupported;
+  const allowText = channel === 'non_voice' || channel === 'blended' || voiceUnsupported; // text is the safe fallback
 
   // Load the scenario (briefing + first step). useFetch-style, inline so we can gate on id.
   const [scenario, setScenario] = useState(null);
@@ -45,12 +52,19 @@ export default function PlayScenario() {
     };
   }, [id]);
 
-  const [mode, setMode] = useState('text'); // 'text' | 'voice'
+  const [mode, setMode] = useState(channel === 'voice' ? 'voice' : 'text'); // 'text' | 'voice'
+  const [typed, setTyped] = useState(''); // free-typed response (text mode)
   const [phase, setPhase] = useState('briefing'); // 'briefing' | 'calling' | 'results'
   const [messages, setMessages] = useState([]);
+
+  // Keep the selected mode within what the channel allows.
+  useEffect(() => {
+    if (mode === 'voice' && !allowVoice) setMode('text');
+    else if (mode === 'text' && !allowText) setMode('voice');
+  }, [mode, allowVoice, allowText]);
   const [step, setStep] = useState(null);
   const [agentTurn, setAgentTurn] = useState(false);
-  const [candidates, setCandidates] = useState(null); // { spoken, options } for "Did you mean?"
+  const [hint, setHint] = useState(null); // "couldn't catch that" message (no answer reveal)
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState(null);
   const [showNotice, setShowNotice] = useState(false);
@@ -80,7 +94,8 @@ export default function PlayScenario() {
   const presentStep = useCallback(
     async (stepObj) => {
       setStep(stepObj);
-      setCandidates(null);
+      setHint(null);
+      setTyped('');
       addMessage({ role: 'customer', text: stepObj.customerLine, stepKey: stepObj.key });
       if (mode === 'voice') {
         transcriptRef.current.push({ speaker: 'customer', text: stepObj.customerLine, stepKey: stepObj.key });
@@ -122,23 +137,33 @@ export default function PlayScenario() {
     }
   };
 
-  // Commit the agent's chosen option for the current step.
-  const commitTurn = useCallback(
-    async (optionIndex, spokenText) => {
+  // Send the agent's own words; the SERVER matches them to an option and scores
+  // partial credit (option score × how fully it matched). Weak/off-topic → try again.
+  const sendAnswer = useCallback(
+    async (rawText) => {
+      const text = (rawText || '').trim();
       const stepObj = stepRef.current;
-      if (!stepObj) return;
+      if (!text || !stepObj) return;
       setAgentTurn(false);
-      setCandidates(null);
+      setHint(null);
       setBusy(true);
       try {
-        const res = await scenariosApi.respond(id, stepObj.key, optionIndex);
+        const res = await scenariosApi.respond(id, stepObj.key, text);
         const r = res.data;
-        const optionText = stepObj.options[optionIndex]?.text || '';
-        addMessage({ role: 'agent', text: mode === 'voice' ? spokenText || optionText : optionText, stepKey: stepObj.key, matched: optionText });
+        if (!r.matched) {
+          setHint(mode === 'voice'
+            ? `I heard “${text}” but it didn't clearly address the customer — tap the mic and try again.`
+            : "That didn't clearly address the customer. Try rephrasing what you'd actually say.");
+          setTyped('');
+          setAgentTurn(true);
+          return;
+        }
+        addMessage({ role: 'agent', text, stepKey: stepObj.key, matched: r.matchedText !== text ? r.matchedText : null });
         addMessage({ role: 'feedback', score: r.score, maxScore: r.maxScore, feedback: r.feedback });
-        pathRef.current.push({ stepKey: stepObj.key, optionIndex });
+        pathRef.current.push({ stepKey: stepObj.key, optionIndex: r.optionIndex, text });
+        setTyped('');
         if (mode === 'voice') {
-          transcriptRef.current.push({ speaker: 'agent', text: spokenText || optionText, stepKey: stepObj.key });
+          transcriptRef.current.push({ speaker: 'agent', text, stepKey: stepObj.key });
           timingRef.current.push({ silenceBeforeMs: silenceRef.current || 0, durationMs: durationRef.current || 0 });
         }
         if (r.ended || !r.nextStep) await finish();
@@ -161,7 +186,7 @@ export default function PlayScenario() {
       return;
     }
     voice.reset();
-    setCandidates(null);
+    setHint(null);
     silenceRef.current = Math.max(0, Date.now() - turnReadyRef.current);
     listenStartRef.current = Date.now();
     awaitingRef.current = true;
@@ -181,14 +206,7 @@ export default function PlayScenario() {
         setAgentTurn(true);
         return;
       }
-      const res = matchResponse(spoken, stepObj.options);
-      if (res.confident && res.best) {
-        commitTurn(res.best.index, spoken);
-      } else {
-        const opts = res.candidates.length ? res.candidates : stepObj.options.map((o) => ({ index: o.index, text: o.text }));
-        setCandidates({ spoken, options: opts });
-        setAgentTurn(true);
-      }
+      sendAnswer(spoken); // server matches + scores (or asks to try again)
     }, 150);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -196,10 +214,10 @@ export default function PlayScenario() {
 
   // Dead-air timer while waiting for the agent to start talking (voice).
   useEffect(() => {
-    if (mode !== 'voice' || !agentTurn || voice.listening || candidates) return undefined;
+    if (mode !== 'voice' || !agentTurn || voice.listening || hint) return undefined;
     const iv = setInterval(() => setDeadAirMs(Date.now() - turnReadyRef.current), 200);
     return () => clearInterval(iv);
-  }, [mode, agentTurn, voice.listening, candidates]);
+  }, [mode, agentTurn, voice.listening, hint]);
 
   // Voice permission error -> fall back to text.
   useEffect(() => {
@@ -272,28 +290,37 @@ export default function PlayScenario() {
             <p className="mb-3"><strong>Issue:</strong> {scenario.customer.issue}</p>
             {scenario.description && <p className="text-muted small">{scenario.description}</p>}
 
-            {/* Mode toggle */}
+            {/* Mode toggle (limited by the batch's channel) */}
             <div className="mb-3">
-              <div className="small fw-semibold mb-1">Choose how you'll answer:</div>
+              <div className="small fw-semibold mb-1">
+                {channel === 'blended' ? "Choose how you'll answer:" : 'Answer mode for your account:'}
+                {channel === 'voice' && <Badge bg="info" className="ms-2">Voice account</Badge>}
+                {channel === 'non_voice' && <Badge bg="info" className="ms-2">Non-voice account</Badge>}
+              </div>
               <div className="btn-group" role="group" aria-label="Answer mode">
-                <Button variant={mode === 'text' ? 'primary' : 'outline-secondary'} onClick={() => setMode('text')}>
+                <Button variant={mode === 'text' ? 'primary' : 'outline-secondary'} onClick={() => setMode('text')} disabled={!allowText}>
                   <i className="bi bi-keyboard me-1" /> Text
                 </Button>
                 <Button
                   variant={mode === 'voice' ? 'primary' : 'outline-secondary'}
                   onClick={chooseVoice}
-                  disabled={!voice.isSupported}
-                  title={voice.isSupported ? 'Answer by speaking' : 'Voice needs Chrome or Edge on desktop with a microphone'}
+                  disabled={!allowVoice}
+                  title={allowVoice ? 'Answer by speaking' : (voiceUnsupported ? 'Voice needs Chrome or Edge on desktop with a microphone' : 'Voice is not enabled for this account')}
                 >
                   <i className="bi bi-mic me-1" /> Voice
                 </Button>
               </div>
-              {!voice.isSupported && (
-                <div className="small text-muted mt-1">
-                  <i className="bi bi-info-circle me-1" />
-                  Voice mode needs Chrome or Edge on desktop. You can still practice in Text mode.
-                </div>
+              {channel === 'voice' && voiceUnsupported && (
+                <div className="small text-muted mt-1"><i className="bi bi-info-circle me-1" />This is a voice account, but your browser can’t do voice (use Chrome/Edge on desktop). Practicing in Text for now.</div>
               )}
+              {channel === 'blended' && voiceUnsupported && (
+                <div className="small text-muted mt-1"><i className="bi bi-info-circle me-1" />Voice needs Chrome or Edge on desktop. You can still practice in Text.</div>
+              )}
+              <div className="small text-muted mt-1">
+                {mode === 'text'
+                  ? <><i className="bi bi-keyboard me-1" />Type your response in your own words — like a real chat.</>
+                  : <><i className="bi bi-mic me-1" />Speak your response — like a real call.</>}
+              </div>
             </div>
 
             <Button size="lg" onClick={startCall}>
@@ -324,6 +351,9 @@ export default function PlayScenario() {
                         <div className={`bubble bubble-${m.role}`}>
                           {m.role === 'customer' && <div className="bubble-who">{scenario.customer.name}</div>}
                           {m.text}
+                          {m.role === 'agent' && m.matched && (
+                            <div className="small text-muted mt-1"><i className="bi bi-check2 me-1" />matched: {m.matched}</div>
+                          )}
                         </div>
                       </div>
                     );
@@ -344,24 +374,13 @@ export default function PlayScenario() {
                 {/* Agent input */}
                 {agentTurn && !busy && (
                   <div className="answer-area">
-                    {/* Did you mean? */}
-                    {candidates ? (
-                      <div>
-                        <div className="small text-muted mb-2">
-                          Heard: <em>“{candidates.spoken}”</em> — did you mean:
-                        </div>
-                        <div className="d-grid gap-2">
-                          {candidates.options.map((o) => (
-                            <Button key={o.index} variant="outline-secondary" className="text-start" onClick={() => commitTurn(o.index, candidates.spoken)}>
-                              {o.text}
-                            </Button>
-                          ))}
-                          <Button variant="link" size="sm" onClick={() => { setCandidates(null); turnReadyRef.current = Date.now(); }}>
-                            <i className="bi bi-arrow-repeat me-1" /> Speak again
-                          </Button>
-                        </div>
-                      </div>
-                    ) : mode === 'voice' ? (
+                    {/* Couldn't match — ask to try again, WITHOUT revealing the options */}
+                    {hint && (
+                      <Alert variant="warning" className="py-2 small">
+                        <i className="bi bi-exclamation-circle me-1" />{hint}
+                      </Alert>
+                    )}
+                    {mode === 'voice' ? (
                       <div className="text-center">
                         {/* Dead-air timer */}
                         {!voice.listening && (
@@ -379,14 +398,23 @@ export default function PlayScenario() {
                         <div className="small text-muted mt-2">Tip: you can also say “option A”, “B”, or “C”.</div>
                       </div>
                     ) : (
-                      // Text mode: clickable options
-                      <div className="d-grid gap-2">
-                        {step?.options.map((o) => (
-                          <Button key={o.index} variant="outline-secondary" className="text-start" onClick={() => commitTurn(o.index)}>
-                            {o.text}
-                          </Button>
-                        ))}
-                      </div>
+                      // Text mode: free typing (matched to the nearest option)
+                      <Form onSubmit={(e) => { e.preventDefault(); sendAnswer(typed); }}>
+                        <div className="d-flex gap-2 align-items-end">
+                          <Form.Control
+                            as="textarea"
+                            rows={2}
+                            autoFocus
+                            value={typed}
+                            onChange={(e) => setTyped(e.target.value)}
+                            onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendAnswer(typed); } }}
+                            placeholder="Type what you'd say to the customer…"
+                            maxLength={500}
+                          />
+                          <Button type="submit" disabled={!typed.trim()} title="Send (Enter)"><i className="bi bi-send" /></Button>
+                        </div>
+                        <div className="small text-muted mt-1">Answer in your own words. Press Enter to send.</div>
+                      </Form>
                     )}
                   </div>
                 )}
@@ -521,11 +549,15 @@ function Results({ result, scenario, onRetry }) {
               <div key={i} className="mb-3 pb-3 border-bottom">
                 <div className="small text-muted">{scenario.customer.name}:</div>
                 <div className="mb-2">{t.customerLine}</div>
-                <div className="small text-muted">You:</div>
-                <div className="mb-2">{t.response}</div>
+                <div className="small text-muted">You said:</div>
+                <div className="mb-1">{t.agentText || t.response}</div>
+                {t.agentText && t.response && t.agentText !== t.response && (
+                  <div className="small text-muted mb-2"><i className="bi bi-check2 me-1" />Best-fit response: {t.response}</div>
+                )}
                 <div className="d-flex align-items-start gap-2">
                   <span className={`badge-tone ${scoreTone(t.score, 10)}`}>+{t.score}/10</span>
-                  {t.feedback && <span className="small text-muted">{t.feedback}</span>}
+                  {typeof t.quality === 'number' && <span className="small text-muted">{t.quality}% match</span>}
+                  {t.feedback && <span className="small text-muted">· {t.feedback}</span>}
                 </div>
               </div>
             ))}

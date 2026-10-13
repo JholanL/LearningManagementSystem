@@ -18,7 +18,7 @@ cd server
 npm install
 cp .env.example .env      # then fill in MONGO_URI and JWT_SECRET
 npm run seed              # WARNING: wipes the database and loads demo data
-npm run dev               # API on http://localhost:5000
+npm run dev               # API on http://localhost:5001 (5000 is taken by macOS AirPlay)
 
 # Frontend (new terminal)
 cd client

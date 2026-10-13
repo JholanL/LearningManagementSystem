@@ -3,7 +3,7 @@
 Final project for CTADWEBL (Advanced Web Programming), NU MOA. MERN + JWT training platform for new-hire call center agents. Fictional setting: VoiceLink Solutions (BPO) training agents for the Lumina Telecom account. Grading rubric emphasizes: functionality, MERN integration, auth & security, responsive UI, React concepts (hooks, routing, components), code quality, documentation, extra features.
 
 ## Commands
-- Backend (`server/`): `npm run dev` (nodemon, port 5000), `npm run seed` (WIPES the DB, then loads demo data), `npm run test:api` (177 end-to-end checks; needs fresh seed + running server; restart the server between runs because of the login rate limit).
+- Backend (`server/`): `npm run dev` (nodemon, port 5001; 5000 is taken by macOS AirPlay), `npm run seed` (WIPES the DB, then loads demo data), `npm run test:api` (177 end-to-end checks; needs fresh seed + running server; restart the server between runs because of the login rate limit).
 - Frontend (`client/`): `npm run dev` (Vite, port 5173), `npm run build`, `npm run lint` (oxlint).
 - `server/.env` and `client/.env` come from the `.env.example` files. Never commit `.env`. nodemon does NOT reload on `.env` changes; type `rs`.
 

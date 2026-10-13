@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router-dom';
 import ProtectedRoute, { GuestRoute, HomeRedirect } from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import LoadingSpinner from './components/LoadingSpinner';
@@ -77,11 +77,11 @@ export default function App() {
             <Route path="users" element={<ManageUsers />} />
             <Route path="batches" element={<ManageBatches />} />
             <Route path="batches/:id" element={<BatchMembers />} />
-            <Route path="courses" element={<Navigate to="/admin/batches" replace />} />
-            <Route path="courses/:courseId/quizzes/new" element={<Navigate to="/admin/batches" replace />} />
-            <Route path="courses/:id" element={<Navigate to="/admin/batches" replace />} />
-            <Route path="quizzes/:id" element={<Navigate to="/admin/batches" replace />} />
-            <Route path="quizzes/:id/analytics" element={<Navigate to="/admin/batches" replace />} />
+            <Route path="courses" element={<TrainerCourses />} />
+            <Route path="courses/:id" element={<CourseBuilder />} />
+            <Route path="courses/:courseId/quizzes/new" element={<QuizBuilder />} />
+            <Route path="quizzes/:id" element={<QuizBuilder />} />
+            <Route path="quizzes/:id/analytics" element={<QuizAnalytics />} />
             <Route path="certificates" element={<ManageCertificates />} />
             <Route path="leaderboard" element={<AdminLeaderboard />} />
             <Route path="audit-logs" element={<AuditLog />} />

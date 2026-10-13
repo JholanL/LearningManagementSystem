@@ -4,6 +4,7 @@ export const NAVIGATION = {
     { to: '/admin', label: 'Dashboard', icon: 'bi-grid-1x2', end: true },
     { to: '/admin/users', label: 'Users', icon: 'bi-people' },
     { to: '/admin/batches', label: 'Batches', icon: 'bi-collection' },
+    { to: '/admin/courses', label: 'Courses', icon: 'bi-journal-bookmark' },
     { to: '/admin/certificates', label: 'Certificates', icon: 'bi-award' },
     { to: '/admin/kb', label: 'Knowledge Base', icon: 'bi-journal-richtext' },
     { to: '/admin/endorsements', label: 'Endorsements', icon: 'bi-hand-thumbs-up' },

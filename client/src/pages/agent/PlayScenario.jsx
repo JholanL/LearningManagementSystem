@@ -18,6 +18,7 @@ import { getErrorMessage } from '../../utils/helpers';
 import useVoice from '../../hooks/useVoice';
 import { deadAirLevel } from '../../utils/deliveryMetrics';
 import KnowledgeBaseDrawer from '../../components/KnowledgeBaseDrawer';
+import ConfirmModal from '../../components/ConfirmModal';
 
 const NOTICE_KEY = 'vla-voice-notice-seen';
 const scoreTone = (s, max = 10) => (s / max >= 0.7 ? 'badge-green' : s / max >= 0.4 ? 'badge-amber' : 'badge-red');
@@ -69,6 +70,7 @@ export default function PlayScenario() {
   const [result, setResult] = useState(null);
   const [showNotice, setShowNotice] = useState(false);
   const [deadAirMs, setDeadAirMs] = useState(0);
+  const [confirmEnd, setConfirmEnd] = useState(false);
 
   // Mutable refs for the live turn (don't need re-renders).
   const pathRef = useRef([]);
@@ -81,12 +83,19 @@ export default function PlayScenario() {
   const awaitingRef = useRef(false);
   const finalTextRef = useRef('');
   const stepRef = useRef(null);
+  const chatRef = useRef(null);
   useEffect(() => {
     stepRef.current = step;
   }, [step]);
   useEffect(() => {
     finalTextRef.current = voice.finalText;
   }, [voice.finalText]);
+
+  // Keep the latest message in view (scrolls the chat box only, not the page)
+  useEffect(() => {
+    const el = chatRef.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }, [messages.length, voice.speaking]);
 
   const addMessage = (msg) => setMessages((m) => [...m, msg]);
 
@@ -268,10 +277,26 @@ export default function PlayScenario() {
         icon="bi-telephone-inbound"
         subtitle={`${scenario.category} · ${scenario.difficulty}`}
         actions={
-          <Button variant="light" onClick={() => navigate('/agent/simulator')}>
-            <i className="bi bi-x-lg me-1" /> End
+          <Button
+            variant="danger"
+            onClick={() => (phase === 'calling' ? setConfirmEnd(true) : navigate('/agent/simulator'))}
+          >
+            <i className="bi bi-telephone-x me-1" /> End
           </Button>
         }
+      />
+
+      <ConfirmModal
+        show={confirmEnd}
+        title="End this call?"
+        message="Your progress on this call will not be saved or scored. You can start the scenario again from the Call Simulator."
+        confirmText="End call"
+        onConfirm={() => {
+          voice.cancel();
+          voice.stopListening();
+          navigate('/agent/simulator');
+        }}
+        onCancel={() => setConfirmEnd(false)}
       />
 
       {/* BRIEFING */}
@@ -336,7 +361,7 @@ export default function PlayScenario() {
           <Col lg={8}>
             <Card>
               <Card.Body>
-                <div className="chat mb-3">
+                <div className="chat mb-3" ref={chatRef}>
                   {messages.map((m, i) => {
                     if (m.role === 'feedback') {
                       return (
@@ -352,7 +377,7 @@ export default function PlayScenario() {
                           {m.role === 'customer' && <div className="bubble-who">{scenario.customer.name}</div>}
                           {m.text}
                           {m.role === 'agent' && m.matched && (
-                            <div className="small text-muted mt-1"><i className="bi bi-check2 me-1" />matched: {m.matched}</div>
+                            <div className="small opacity-75 mt-1"><i className="bi bi-check2 me-1" />matched: {m.matched}</div>
                           )}
                         </div>
                       </div>

@@ -528,6 +528,10 @@ a:hover { text-decoration: underline; }
 .app-toast-danger .toast-icon { color: var(--red); }
 .app-toast-warning .toast-icon { color: var(--amber); }
 .app-toast-info .toast-icon { color: var(--brand); }
+.app-toast-notification { border-left: 4px solid var(--brand); }
+.app-toast-notification .toast-icon { color: var(--brand); }
+.toast-link { background: none; border: 0; padding: 0; text-align: left; color: inherit; cursor: pointer; }
+.toast-link:hover strong { color: var(--brand); }
 
 /* Print: hide app chrome (useful for printable certificates) */
 @media print {

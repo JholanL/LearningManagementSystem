@@ -1,10 +1,14 @@
-import { forwardRef, useCallback, useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { forwardRef, useCallback, useEffect, useRef, useState } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Dropdown, Spinner } from 'react-bootstrap';
 import { notificationsApi } from '../api/services';
 import { timeAgo } from '../utils/helpers';
+import { useToast } from '../context/ToastContext';
 
 const POLL_MS = 30000;
+
+// No pop-ups while the agent is on a live call, a timed quiz or the daily drill (the badge still updates).
+const QUIET_PATHS = /^\/agent\/(simulator\/[^/]+|quizzes\/[^/]+|drill)/;
 
 // Bootstrap icon per notification type
 const ICONS = {
@@ -34,15 +38,35 @@ export default function NotificationBell() {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
+  const toast = useToast();
+  const location = useLocation();
+  const seenRef = useRef(null); // ids already known (null until the first fetch)
+  const prevCountRef = useRef(null);
+  const popUpRef = useRef(() => {});
 
   // Poll the unread count; pause when the tab is hidden; clear on unmount.
+  // When the count changes, fetch the unread list and pop up anything not seen before.
+  // The first fetch only records what is already there, so old unread items never pop up.
   useEffect(() => {
     let active = true;
     const fetchCount = async () => {
       if (document.visibilityState === 'hidden') return;
       try {
         const { count } = await notificationsApi.unreadCount();
-        if (active) setUnread(count);
+        if (!active) return;
+        setUnread(count);
+        if (seenRef.current && count === prevCountRef.current) return;
+        prevCountRef.current = count;
+
+        const res = await notificationsApi.list({ unread: true, limit: 10 });
+        if (!active) return;
+        if (!seenRef.current) {
+          seenRef.current = new Set(res.data.map((n) => n._id));
+          return;
+        }
+        const fresh = res.data.filter((n) => !seenRef.current.has(n._id));
+        fresh.forEach((n) => seenRef.current.add(n._id));
+        if (fresh.length) popUpRef.current(fresh);
       } catch {
         /* silent: the bell should never break the layout */
       }
@@ -80,6 +104,7 @@ export default function NotificationBell() {
     setOpen(false);
     if (!n.read) {
       setUnread((u) => Math.max(0, u - 1));
+      if (prevCountRef.current) prevCountRef.current -= 1;
       setItems((list) => list.map((x) => (x._id === n._id ? { ...x, read: true } : x)));
       try {
         await notificationsApi.markRead(n._id);
@@ -92,6 +117,7 @@ export default function NotificationBell() {
 
   const onMarkAll = async () => {
     setUnread(0);
+    prevCountRef.current = 0;
     setItems((list) => list.map((x) => ({ ...x, read: true })));
     try {
       await notificationsApi.markAllRead();
@@ -99,6 +125,29 @@ export default function NotificationBell() {
       /* ignore */
     }
   };
+
+  // Latest pop-up logic, kept in a ref so the polling effect never goes stale
+  useEffect(() => {
+    popUpRef.current = (fresh) => {
+      if (QUIET_PATHS.test(location.pathname)) return;
+      if (fresh.length === 1) {
+        const [n] = fresh;
+        toast.notification({
+          title: n.title,
+          message: n.message,
+          icon: ICONS[n.type] || 'bi-bell',
+          onClick: () => onItem(n),
+        });
+      } else {
+        toast.notification({
+          title: `${fresh.length} new notifications`,
+          message: fresh.map((n) => n.title).join(' · '),
+          icon: 'bi-bell',
+          onClick: () => setTimeout(() => onToggle(true), 0), // after this click, so the menu's outside-click doesn't close it
+        });
+      }
+    };
+  });
 
   return (
     <Dropdown align="end" show={open} onToggle={onToggle}>

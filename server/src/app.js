@@ -14,12 +14,21 @@ const app = express();
 app.set('trust proxy', 1); // needed for rate limiting behind Vercel / proxies
 app.use(helmet()); // secure HTTP headers
 
-const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173').split(',').map((o) => o.trim());
+const allowedOrigins = (process.env.CLIENT_URL || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
+// Vercel gives a new URL per deploy (production + previews). Allow this project's
+// Vercel domains so we don't have to whitelist each one. Set VERCEL_PROJECT to the
+// project slug (defaults to "learningmanagementsystem").
+const VERCEL_PROJECT = process.env.VERCEL_PROJECT || 'learningmanagementsystem';
+const vercelOrigin = new RegExp(`^https://${VERCEL_PROJECT}[a-z0-9-]*\\.vercel\\.app$`, 'i');
+const isAllowedOrigin = (origin) => allowedOrigins.includes(origin) || vercelOrigin.test(origin);
 app.use(
   cors({
     origin: (origin, cb) => {
       // allow tools like Postman (no origin) and whitelisted frontends
-      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      if (!origin || isAllowedOrigin(origin)) return cb(null, true);
       return cb(new ApiError(403, `CORS: ${origin} is not allowed`));
     },
   })

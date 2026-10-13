@@ -1,6 +1,6 @@
 /**
  * Trainer → My Batches: the waves this trainer handles. Click one to open its
- * progress matrix (BatchProgress).
+ * detail (curriculum + progress matrix), where the curriculum is managed.
  */
 import { Badge, Button, Card, Col, Form, Row } from 'react-bootstrap';
 import { useNavigate } from 'react-router-dom';
@@ -22,7 +22,7 @@ export default function TrainerBatches() {
 
   return (
     <>
-      <PageHeader title="My Batches" icon="bi-collection" subtitle="The training waves you handle. Open one to see the progress matrix." />
+      <PageHeader title="My Batches" icon="bi-collection" subtitle="The training waves you handle. Open one to manage its curriculum and see progress." />
 
       <Card className="mb-3">
         <Card.Body>
@@ -60,7 +60,7 @@ export default function TrainerBatches() {
                   </div>
                   <div className="d-flex align-items-center justify-content-between mt-3">
                     <Badge bg="light" text="dark" pill><i className="bi bi-people me-1" />{b.agentCount} agents</Badge>
-                    <span className="small text-primary">Open progress <i className="bi bi-arrow-right" /></span>
+                    <span className="small text-primary">Open <i className="bi bi-arrow-right" /></span>
                   </div>
                 </Card.Body>
               </Card>

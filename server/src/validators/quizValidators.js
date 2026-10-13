@@ -5,6 +5,7 @@ const quizBody = (isUpdate = false) => {
   return [
     req(body('title')).trim().notEmpty().withMessage('Quiz title is required').isLength({ max: 150 }),
     body('description').optional().trim().isLength({ max: 1000 }),
+    body('lesson').optional({ nullable: true, checkFalsy: true }).isMongoId().withMessage('Invalid lesson'),
     body('timeLimitMinutes').optional().isInt({ min: 0, max: 180 }).toInt(),
     req(body('questions')).isArray({ min: 1, max: 100 }).withMessage('Provide 1-100 questions'),
     body('questions.*.question').trim().notEmpty().withMessage('Question text is required'),

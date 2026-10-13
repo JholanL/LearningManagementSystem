@@ -17,5 +17,6 @@ router
   .put(authorize('admin'), mongoIdParam(), v.updateBatch, validate, ctrl.updateBatch)
   .delete(authorize('admin'), mongoIdParam(), validate, ctrl.deleteBatch);
 router.put('/:id/agents', authorize('admin'), mongoIdParam(), v.setAgents, validate, ctrl.setAgents);
+router.put('/:id/courses', authorize('admin', 'trainer'), mongoIdParam(), v.setCourses, validate, ctrl.setCourses);
 
 module.exports = router;

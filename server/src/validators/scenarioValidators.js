@@ -28,13 +28,14 @@ const scenarioBody = (isUpdate = false) => {
 
 const respond = [
   body('stepKey').trim().notEmpty().withMessage('stepKey is required'),
-  body('optionIndex').isInt({ min: 0, max: 3 }).withMessage('optionIndex must be 0-3').toInt(),
+  body('text').optional().isString().isLength({ max: 1000 }).withMessage('Answer is too long'),
 ];
 
 const submit = [
   body('path').isArray({ min: 1, max: 30 }).withMessage('path must be a non-empty array'),
   body('path.*.stepKey').trim().notEmpty(),
-  body('path.*.optionIndex').isInt({ min: 0, max: 3 }).toInt(),
+  body('path.*.optionIndex').optional().isInt({ min: 0, max: 3 }).toInt(),
+  body('path.*.text').optional().isString().isLength({ max: 1000 }).withMessage('Answer is too long'),
   // Optional voice-mode payload (feature 1)
   body('mode').optional().isIn(['text', 'voice']).withMessage('mode must be text or voice'),
   body('transcript').optional().isArray({ max: 60 }).withMessage('Transcript is too long'),

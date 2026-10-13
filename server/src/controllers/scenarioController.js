@@ -5,9 +5,12 @@ const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { paginate, searchFilter } = require('../utils/query');
 const { computeDelivery } = require('../utils/deliveryMetrics');
+const { matchOption, optionQuality } = require('../utils/responseMatch');
+const { semanticMatch } = require('../services/semanticMatch');
 
 const FIELDS = ['title', 'description', 'category', 'difficulty', 'customer', 'startStep', 'steps', 'passingScore'];
 const MAX_STEP_SCORE = 10;
+const MIN_QUALITY = 0.12; // below this the answer doesn't clearly address the customer → "try again"
 
 async function loadScenario(user, id) {
   const scenario = await Scenario.findById(id);
@@ -107,19 +110,37 @@ exports.deleteScenario = asyncHandler(async (req, res) => {
   res.json({ success: true, message: 'Scenario deleted.' });
 });
 
-// POST /api/scenarios/:id/respond   { stepKey, optionIndex }
-// Agent picks a response -> returns feedback for that choice and the next customer line.
+// POST /api/scenarios/:id/respond   { stepKey, text }
+// The agent answers in their own words (typed or spoken). The SERVER matches the text
+// to the intended option and awards partial credit = option.score × how fully it matched.
+// A weak/off-topic answer returns { matched:false } so the agent is asked to try again.
 exports.respond = asyncHandler(async (req, res) => {
   const scenario = await loadScenario(req.user, req.params.id);
   const step = scenario.getStep(req.body.stepKey);
   if (!step) throw new ApiError(400, 'Unknown step.');
-  const option = step.options[req.body.optionIndex];
-  if (!option) throw new ApiError(400, 'Unknown option.');
+
+  const text = String(req.body.text || '').trim();
+  let m = text ? matchOption(text, step.options) : null;
+  // Same idea, different words? Fall back to the AI semantic matcher (best-effort).
+  if (text && (!m || m.quality < MIN_QUALITY)) {
+    const ai = await semanticMatch(text, step.options);
+    if (ai && ai.quality >= MIN_QUALITY) m = ai;
+  }
+  if (!m || m.quality < MIN_QUALITY) {
+    return res.json({ success: true, data: { matched: false } });
+  }
+
+  const option = step.options[m.index];
+  const score = Math.round(option.score * m.quality); // partial credit
 
   res.json({
     success: true,
     data: {
-      score: option.score,
+      matched: true,
+      optionIndex: m.index,
+      matchedText: option.text,
+      quality: Math.round(m.quality * 100),
+      score,
       maxScore: MAX_STEP_SCORE,
       feedback: option.feedback,
       ended: !option.nextStep,
@@ -135,23 +156,40 @@ exports.submit = asyncHandler(async (req, res) => {
   const { path } = req.body;
 
   let expectedKey = scenario.startStep;
-  const scored = path.map((entry, i) => {
+  const scored = [];
+  for (let i = 0; i < path.length; i += 1) {
+    const entry = path[i];
     if (entry.stepKey !== expectedKey) throw new ApiError(400, `Invalid path at step ${i + 1}.`);
     const step = scenario.getStep(entry.stepKey);
+    // Score the option the agent actually took (keeps the branch they experienced),
+    // but re-derive the SCORE authoritatively from their own words.
     const option = step.options[entry.optionIndex];
     if (!option) throw new ApiError(400, `Invalid option at step ${i + 1}.`);
+
+    const text = String(entry.text || '').trim();
+    let quality = text ? optionQuality(text, option) : 1; // legacy/no-text → full
+    if (text && quality < MIN_QUALITY) {
+      // Same idea, different words? Confirm with the AI semantic matcher (best-effort).
+      // eslint-disable-next-line no-await-in-loop
+      const ai = await semanticMatch(text, step.options);
+      if (ai && ai.index === entry.optionIndex) quality = Math.max(quality, ai.quality);
+    }
+    const score = Math.round(option.score * quality);
+
     const isLast = i === path.length - 1;
     if (isLast && option.nextStep) throw new ApiError(400, 'The call has not ended yet.');
     expectedKey = option.nextStep;
-    return {
+    scored.push({
       stepKey: entry.stepKey,
       optionIndex: entry.optionIndex,
-      score: option.score,
+      score,
+      quality: Math.round(quality * 100),
       customerLine: step.customerLine,
       response: option.text,
+      agentText: text || option.text,
       feedback: option.feedback,
-    };
-  });
+    });
+  }
 
   const totalScore = scored.reduce((sum, s) => sum + s.score, 0);
   const maxScore = scored.length * MAX_STEP_SCORE;

@@ -447,6 +447,15 @@ a:hover { text-decoration: underline; }
 /* Leaderboard rank medal (top 3) */
 .rank-medal { display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border-radius: 50%; color: #fff; font-weight: 700; font-size: 0.8125rem; }
 
+/* Form validation UX: shake the first invalid field (see FormErrorEffects) */
+@keyframes field-shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-5px); }
+  40%, 80% { transform: translateX(5px); }
+}
+.field-shake { animation: field-shake 0.4s ease; }
+@media (prefers-reduced-motion: reduce) { .field-shake { animation: none; } }
+
 /* ---------- Certificates ---------- */
 .cert-card { position: relative; overflow: hidden; }
 .cert-card .cert-ribbon {

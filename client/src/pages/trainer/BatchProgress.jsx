@@ -13,6 +13,7 @@ import EmptyState from '../../components/EmptyState';
 import AgentTrendModal from '../../components/AgentTrendModal';
 import EndorsementModal from '../../components/EndorsementModal';
 import ProductionBadge from '../../components/ProductionBadge';
+import BatchCurriculumCard from '../../components/BatchCurriculumCard';
 import useFetch from '../../hooks/useFetch';
 import { useAuth } from '../../context/AuthContext';
 import { progressApi } from '../../api/services';
@@ -40,6 +41,8 @@ export default function BatchProgress() {
   return (
     <>
       <PageHeader title={batch ? `${batch.name} · Progress` : 'Batch Progress'} icon="bi-table" subtitle={batch?.account} />
+
+      <BatchCurriculumCard batchId={id} />
 
       <Card>
         <Card.Body>

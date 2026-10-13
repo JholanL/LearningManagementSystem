@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router-dom';
 import ProtectedRoute, { GuestRoute, HomeRedirect } from './routes/ProtectedRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import LoadingSpinner from './components/LoadingSpinner';
+import FormErrorEffects from './components/FormErrorEffects';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import { NotFound, Unauthorized } from './pages/shared/StatusPages';
@@ -53,6 +54,7 @@ const Drill = lazy(() => import('./pages/agent/Drill'));
 export default function App() {
   return (
     <Suspense fallback={<LoadingSpinner fullPage />}>
+      <FormErrorEffects />
       <Routes>
         {/* Public */}
         <Route path="/" element={<HomeRedirect />} />

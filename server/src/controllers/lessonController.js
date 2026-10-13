@@ -1,11 +1,14 @@
 const Lesson = require('../models/Lesson');
 const Course = require('../models/Course');
 const Progress = require('../models/Progress');
+const Quiz = require('../models/Quiz');
+const QuizAttempt = require('../models/QuizAttempt');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const pick = require('../utils/pick');
 const { assertCanViewCourse, assertCanEditCourse } = require('../services/accessService');
 const { syncCourseCompletion } = require('../services/progressService');
+const { assertLessonUnlocked, nextStep } = require('../services/learningPathService');
 
 const FIELDS = ['title', 'content', 'videoUrl', 'order', 'durationMinutes'];
 
@@ -45,9 +48,22 @@ exports.getLesson = asyncHandler(async (req, res) => {
   const index = siblings.findIndex((l) => String(l._id) === String(lesson._id));
 
   let completed;
+  let completedCount; // staff: how many agents have already finished this lesson (for the delete warning)
+  let lessonQuiz; // agent: the quiz that follows this lesson (if any), + whether they've passed it
   if (req.user.role === 'agent') {
     const progress = await Progress.findOne({ user: req.user._id, course: course._id });
     completed = !!progress?.completedLessons.some((l) => String(l) === String(lesson._id));
+    if (!completed) await assertLessonUnlocked(req.user._id, course, lesson); // block skipping ahead
+
+    const quiz = await Quiz.findOne({ course: course._id, lesson: lesson._id }).sort('createdAt').select('title');
+    if (quiz) {
+      const passed = await QuizAttempt.exists({ user: req.user._id, quiz: quiz._id, passed: true });
+      lessonQuiz = { _id: quiz._id, title: quiz.title, passed: !!passed };
+    } else {
+      lessonQuiz = null;
+    }
+  } else {
+    completedCount = await Progress.countDocuments({ course: course._id, completedLessons: lesson._id });
   }
 
   res.json({
@@ -58,6 +74,8 @@ exports.getLesson = asyncHandler(async (req, res) => {
       prevLesson: siblings[index - 1] || null,
       nextLesson: siblings[index + 1] || null,
       ...(completed !== undefined && { completed }),
+      ...(lessonQuiz !== undefined && { lessonQuiz }),
+      ...(completedCount !== undefined && { completedCount }),
     },
   });
 });
@@ -84,6 +102,7 @@ exports.deleteLesson = asyncHandler(async (req, res) => {
 exports.completeLesson = asyncHandler(async (req, res) => {
   const { lesson, course } = await loadLesson(req.params.id);
   await assertCanViewCourse(req.user, course);
+  await assertLessonUnlocked(req.user._id, course, lesson, { forComplete: true }); // enforce order
 
   await Progress.updateOne(
     { user: req.user._id, course: course._id },
@@ -91,6 +110,7 @@ exports.completeLesson = asyncHandler(async (req, res) => {
     { upsert: true }
   );
   const progress = await syncCourseCompletion(req.user._id, course._id);
+  const next = await nextStep(req.user._id, course._id); // where to go: this lesson's quiz, the next lesson, etc.
 
   res.json({
     success: true,
@@ -99,6 +119,7 @@ exports.completeLesson = asyncHandler(async (req, res) => {
       percent: progress.percent,
       status: progress.status,
       certificate: progress.certificate,
+      next, // { type: 'quiz'|'lesson'|'course', id }
     },
   });
 });

@@ -47,14 +47,14 @@ exports.login = asyncHandler(async (req, res) => {
   if (!user.isActive) throw new ApiError(403, 'Your account has been deactivated. Contact your administrator.');
 
   await user.registerSuccessfulLogin();
-  await user.populate('batch', 'name account');
+  await user.populate('batch', 'name account channel');
   await audit(req, { ...actorSnapshot, action: 'auth.login', targetType: 'User', targetId: user._id, targetLabel: `${user.firstName} ${user.lastName}` });
   res.json({ success: true, message: 'Logged in.', token: generateToken(user), user });
 });
 
 // GET /api/auth/me
 exports.getMe = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user._id).populate('batch', 'name account startDate endDate status');
+  const user = await User.findById(req.user._id).populate('batch', 'name account channel startDate endDate status');
   res.json({ success: true, user });
 });
 
@@ -64,7 +64,7 @@ exports.updateMe = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user._id);
   Object.assign(user, updates);
   await user.save();
-  await user.populate('batch', 'name account');
+  await user.populate('batch', 'name account channel');
   res.json({ success: true, message: 'Profile updated.', user });
 });
 

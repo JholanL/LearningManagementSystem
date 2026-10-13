@@ -1,7 +1,12 @@
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import BrandMark from '../components/BrandMark';
 
 const YEAR = new Date().getFullYear();
+
+// Background slideshow (photos from Unsplash, stored in public/auth)
+const SLIDES = [1, 2, 3, 4, 5].map((n) => `/auth/training-${n}.jpg`);
+const SLIDE_MS = 6000;
 
 const HIGHLIGHTS = [
   { icon: 'bi-journal-check', title: 'Structured courses', text: 'Lessons and graded quizzes per training wave.' },
@@ -11,9 +16,26 @@ const HIGHLIGHTS = [
 
 // Split screen used by Login and Register
 export default function AuthLayout({ title, subtitle, children }) {
+  const [slide, setSlide] = useState(0);
+
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const id = setInterval(() => setSlide((s) => (s + 1) % SLIDES.length), SLIDE_MS);
+    return () => clearInterval(id);
+  }, []);
+
   return (
     <div className="auth-page">
       <aside className="auth-hero d-none d-lg-flex">
+        <div className="auth-slides" aria-hidden="true">
+          {SLIDES.map((src, i) => (
+            <div
+              key={src}
+              className={`auth-slide${i === slide ? ' is-active' : ''}`}
+              style={{ backgroundImage: `url(${src})` }}
+            />
+          ))}
+        </div>
         <div className="auth-hero-inner">
           <BrandMark size={56} className="mb-4" />
           <div className="auth-overline">VoiceLink Solutions · Agent Academy</div>

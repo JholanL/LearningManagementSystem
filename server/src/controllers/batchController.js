@@ -9,7 +9,7 @@ const { paginate, searchFilter } = require('../utils/query');
 const { audit } = require('../services/auditService');
 const { notify } = require('../services/notificationService');
 
-const FIELDS = ['name', 'account', 'description', 'trainer', 'courses', 'startDate', 'endDate', 'status'];
+const FIELDS = ['name', 'account', 'description', 'channel', 'trainer', 'courses', 'startDate', 'endDate', 'status'];
 
 async function validateRefs({ trainer, courses }) {
   if (trainer) {
@@ -26,6 +26,13 @@ function assertCanViewBatch(user, batch) {
   if (user.role === 'admin') return;
   if (user.role === 'trainer' && String(batch.trainer._id || batch.trainer) === String(user._id)) return;
   throw new ApiError(403, 'You can only view your own batches.');
+}
+
+// Admin, or the trainer who owns the batch, may manage its curriculum.
+function assertCanManageBatch(user, batch) {
+  if (user.role === 'admin') return;
+  if (user.role === 'trainer' && String(batch.trainer._id || batch.trainer) === String(user._id)) return;
+  throw new ApiError(403, 'You can only manage your own batches.');
 }
 
 // GET /api/batches?search=&status=&page=&limit=   (admin: all, trainer: own)
@@ -150,6 +157,48 @@ exports.setAgents = asyncHandler(async (req, res) => {
     link: '/agent/courses',
   });
   res.json({ success: true, message: `Batch now has ${requestedIds.length} agent(s).`, data: { membershipVersion: batch.membershipVersion } });
+});
+
+// PUT /api/batches/:id/courses   (admin, or the owning trainer) - replaces the batch curriculum
+exports.setCourses = asyncHandler(async (req, res) => {
+  const batch = await Batch.findById(req.params.id);
+  if (!batch) throw new ApiError(404, 'Batch not found');
+  assertCanManageBatch(req.user, batch);
+
+  const courseIds = [...new Set((req.body.courseIds || []).map(String))];
+  if (courseIds.length) {
+    const count = await Course.countDocuments({ _id: { $in: courseIds } });
+    if (count !== courseIds.length) throw new ApiError(400, 'One or more courses do not exist.');
+  }
+
+  const before = new Set(batch.courses.map(String));
+  const added = courseIds.filter((id) => !before.has(id));
+  batch.courses = courseIds;
+  await batch.save();
+
+  await audit(req, {
+    action: 'batch.courses',
+    targetType: 'Batch',
+    targetId: batch._id,
+    targetLabel: batch.name,
+    metadata: { total: courseIds.length, added: added.length },
+  });
+
+  // Let the batch's agents know when newly added courses are already published (visible to them).
+  if (added.length) {
+    const publishedAdded = await Course.countDocuments({ _id: { $in: added }, isPublished: true });
+    if (publishedAdded) {
+      const agents = await User.find({ batch: batch._id, role: 'agent' }).select('_id');
+      await notify(agents.map((a) => a._id), {
+        type: 'course.published',
+        title: 'New course available',
+        message: `New course(s) were added to ${batch.name}. Check your courses.`,
+        link: '/agent/courses',
+      });
+    }
+  }
+
+  res.json({ success: true, message: `Curriculum updated (${courseIds.length} course(s)).`, data: { courses: courseIds } });
 });
 
 // DELETE /api/batches/:id   (admin) - agents become unassigned

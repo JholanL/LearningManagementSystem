@@ -66,6 +66,7 @@ app.use('/api/kb', require('./routes/kbRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/endorsements', require('./routes/endorsementRoutes'));
 app.use('/api/drill', require('./routes/drillRoutes'));
+app.use('/api/ai', require('./routes/aiRoutes'));
 app.use('/api', require('./routes/miscRoutes'));
 
 // ---------- Errors ----------

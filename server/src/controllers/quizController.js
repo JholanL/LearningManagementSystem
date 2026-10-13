@@ -1,5 +1,6 @@
 const Quiz = require('../models/Quiz');
 const Course = require('../models/Course');
+const Lesson = require('../models/Lesson');
 const QuizAttempt = require('../models/QuizAttempt');
 const Batch = require('../models/Batch');
 const ApiError = require('../utils/ApiError');
@@ -8,6 +9,7 @@ const pick = require('../utils/pick');
 const { paginate } = require('../utils/query');
 const { assertCanViewCourse, assertCanEditCourse } = require('../services/accessService');
 const { syncCourseCompletion } = require('../services/progressService');
+const { assertQuizUnlocked, nextStep } = require('../services/learningPathService');
 const { notify } = require('../services/notificationService');
 
 const FIELDS = ['title', 'description', 'timeLimitMinutes', 'questions'];
@@ -20,6 +22,14 @@ async function loadQuiz(id) {
   return { quiz, course };
 }
 
+// Validate the chosen lesson belongs to the course; '' / null → course-level (final) quiz.
+async function resolveLesson(courseId, lessonId) {
+  if (!lessonId) return null;
+  const lesson = await Lesson.findOne({ _id: lessonId, course: courseId }).select('_id');
+  if (!lesson) throw new ApiError(400, 'Selected lesson is not part of this course.');
+  return lesson._id;
+}
+
 // GET /api/courses/:courseId/quizzes
 exports.getQuizzes = asyncHandler(async (req, res) => {
   await assertCanViewCourse(req.user, req.params.courseId);
@@ -28,6 +38,7 @@ exports.getQuizzes = asyncHandler(async (req, res) => {
     _id: q._id,
     title: q.title,
     description: q.description,
+    lesson: q.lesson,
     timeLimitMinutes: q.timeLimitMinutes,
     questionCount: q.questions.length,
     totalPoints: q.totalPoints,
@@ -40,7 +51,8 @@ exports.createQuiz = asyncHandler(async (req, res) => {
   const course = await Course.findById(req.params.courseId);
   if (!course) throw new ApiError(404, 'Course not found');
   assertCanEditCourse(req.user, course);
-  const quiz = await Quiz.create({ ...pick(req.body, FIELDS), course: course._id });
+  const lesson = await resolveLesson(course._id, req.body.lesson);
+  const quiz = await Quiz.create({ ...pick(req.body, FIELDS), course: course._id, lesson });
   res.status(201).json({ success: true, message: 'Quiz created.', data: quiz });
 });
 
@@ -53,6 +65,8 @@ exports.getQuiz = asyncHandler(async (req, res) => {
   if (req.user.role !== 'agent') {
     return res.json({ success: true, data: { ...quiz.toObject({ virtuals: true }), courseTitle: course.title } });
   }
+
+  await assertQuizUnlocked(req.user._id, course, quiz); // block skipping ahead via URL
 
   const attempts = await QuizAttempt.find({ user: req.user._id, quiz: quiz._id }).select('percentage passed');
   res.json({
@@ -75,6 +89,7 @@ exports.updateQuiz = asyncHandler(async (req, res) => {
   const { quiz, course } = await loadQuiz(req.params.id);
   assertCanEditCourse(req.user, course);
   Object.assign(quiz, pick(req.body, FIELDS));
+  if ('lesson' in req.body) quiz.lesson = await resolveLesson(course._id, req.body.lesson);
   await quiz.save();
   res.json({ success: true, message: 'Quiz updated.', data: quiz });
 });
@@ -94,6 +109,7 @@ exports.deleteQuiz = asyncHandler(async (req, res) => {
 exports.submitQuiz = asyncHandler(async (req, res) => {
   const { quiz, course } = await loadQuiz(req.params.id);
   await assertCanViewCourse(req.user, course);
+  await assertQuizUnlocked(req.user._id, course, quiz); // can't submit a locked quiz
 
   const previous = await QuizAttempt.find({ user: req.user._id, quiz: quiz._id }).select('passed');
   if (previous.some((a) => a.passed)) throw new ApiError(400, 'You already passed this quiz.');
@@ -135,6 +151,7 @@ exports.submitQuiz = asyncHandler(async (req, res) => {
 
   const revealAnswers = passed || attemptsLeft <= 0;
   const progress = passed ? await syncCourseCompletion(req.user._id, course._id) : null;
+  const next = passed ? await nextStep(req.user._id, course._id) : null; // where to go after passing
 
   // Tell the agent their result...
   await notify(req.user._id, {
@@ -176,6 +193,7 @@ exports.submitQuiz = asyncHandler(async (req, res) => {
         ...(revealAnswers && { correctAnswer: q.correctAnswer, explanation: q.explanation }),
       })),
       ...(progress && { courseProgress: { percent: progress.percent, status: progress.status }, certificate: progress.certificate }),
+      ...(next && { next }), // { type: 'lesson'|'quiz'|'course', id }
     },
   });
 });

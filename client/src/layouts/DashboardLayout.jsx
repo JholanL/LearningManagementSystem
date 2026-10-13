@@ -7,6 +7,7 @@ import { fullName, initials, ROLE_LABEL } from '../utils/helpers';
 import NotificationBell from '../components/NotificationBell';
 import AdminGlobalSearch from '../components/AdminGlobalSearch';
 import BrandMark from '../components/BrandMark';
+import ConfirmModal from '../components/ConfirmModal';
 
 function Brand() {
   return (
@@ -48,12 +49,20 @@ export default function DashboardLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [showMenu, setShowMenu] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const links = NAVIGATION[user.role] || [];
   const crumb = useBreadcrumb(user.role);
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login', { replace: true });
+  const doLogout = async () => {
+    setLoggingOut(true);
+    try {
+      await logout();
+      navigate('/login', { replace: true });
+    } finally {
+      setLoggingOut(false);
+      setConfirmLogout(false);
+    }
   };
 
   return (
@@ -76,20 +85,6 @@ export default function DashboardLayout() {
               </NavLink>
             ))}
           </nav>
-          <div className="sidebar-footer">
-            {/* User card -> profile */}
-            <Link to="/profile" className="sidebar-user" onClick={() => setShowMenu(false)}>
-              <Avatar user={user} size={34} />
-              <span className="min-w-0">
-                <span className="su-name d-block text-truncate">{fullName(user)}</span>
-                <span className="su-role d-block text-truncate">{user.batch?.name || ROLE_LABEL[user.role]}</span>
-              </span>
-            </Link>
-            <button type="button" className="sidebar-link w-100 border-0 bg-transparent text-start" onClick={handleLogout}>
-              <i className="bi bi-box-arrow-left" />
-              <span>Log out</span>
-            </button>
-          </div>
         </Offcanvas.Body>
       </Offcanvas>
 
@@ -145,7 +140,7 @@ export default function DashboardLayout() {
                   <i className="bi bi-person me-2" /> My Profile
                 </Dropdown.Item>
                 <Dropdown.Divider />
-                <Dropdown.Item onClick={handleLogout} className="text-danger">
+                <Dropdown.Item onClick={() => setConfirmLogout(true)} className="text-danger">
                   <i className="bi bi-box-arrow-left me-2" /> Log out
                 </Dropdown.Item>
               </Dropdown.Menu>
@@ -157,6 +152,17 @@ export default function DashboardLayout() {
           <Outlet />
         </main>
       </div>
+
+      <ConfirmModal
+        show={confirmLogout}
+        title="Log out?"
+        message="You'll be signed out of VoiceLink Academy. For security, this ends all your active sessions."
+        confirmText="Log out"
+        variant="danger"
+        loading={loggingOut}
+        onConfirm={doLogout}
+        onCancel={() => setConfirmLogout(false)}
+      />
     </div>
   );
 }

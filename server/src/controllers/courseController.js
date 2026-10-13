@@ -69,7 +69,7 @@ exports.getCourse = asyncHandler(async (req, res) => {
 
   const [lessons, quizzes] = await Promise.all([
     Lesson.find({ course: course._id }).select('title order durationMinutes videoUrl').sort('order'),
-    Quiz.find({ course: course._id }).select('title description timeLimitMinutes questions'),
+    Quiz.find({ course: course._id }).select('title description timeLimitMinutes questions lesson').sort('createdAt'),
   ]);
 
   let progress = null;
@@ -98,6 +98,7 @@ exports.getCourse = asyncHandler(async (req, res) => {
           _id: q._id,
           title: q.title,
           description: q.description,
+          lesson: q.lesson,
           timeLimitMinutes: q.timeLimitMinutes,
           questionCount: q.questions.length,
           totalPoints: q.totalPoints,

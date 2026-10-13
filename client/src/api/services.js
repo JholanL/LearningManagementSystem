@@ -37,6 +37,7 @@ export const batchesApi = {
   create: (data) => unwrap(api.post('/batches', data)),
   update: (id, data) => unwrap(api.put(`/batches/${id}`, data)),
   setAgents: (id, agentIds, membershipVersion) => unwrap(api.put(`/batches/${id}/agents`, { agentIds, membershipVersion })),
+  setCourses: (id, courseIds) => unwrap(api.put(`/batches/${id}/courses`, { courseIds })), // admin or owning trainer
   remove: (id) => unwrap(api.delete(`/batches/${id}`)),
 };
 
@@ -78,7 +79,7 @@ export const scenariosApi = {
   update: (id, data) => unwrap(api.put(`/scenarios/${id}`, data)),
   togglePublish: (id) => unwrap(api.patch(`/scenarios/${id}/publish`)),
   remove: (id) => unwrap(api.delete(`/scenarios/${id}`)),
-  respond: (id, stepKey, optionIndex) => unwrap(api.post(`/scenarios/${id}/respond`, { stepKey, optionIndex })), // agent
+  respond: (id, stepKey, text) => unwrap(api.post(`/scenarios/${id}/respond`, { stepKey, text })), // agent (server matches text → option)
   // payload: array of path entries (text mode) OR { path, mode, transcript, timing } (voice mode)
   submit: (id, payload) => unwrap(api.post(`/scenarios/${id}/submit`, Array.isArray(payload) ? { path: payload } : payload)),
   attempts: (id, params) => unwrap(api.get(`/scenarios/${id}/attempts`, { params })),
@@ -144,6 +145,13 @@ export const auditApi = {
     return unwrap(api.get('/audit-logs', { params: cleanParams }));
   }, // filters: search, action, actor, from, to
   actions: () => unwrap(api.get('/audit-logs/actions')), // distinct action names for the filter dropdown
+};
+
+/* ---------------- AI (trainer / admin) ---------------- */
+export const aiApi = {
+  // AI generation is slow — allow up to 90s (the global default is 20s).
+  generateQuiz: (text, count) => unwrap(api.post('/ai/generate-quiz', { text, count }, { timeout: 90000 })),
+  formatLesson: (text) => unwrap(api.post('/ai/format-lesson', { text }, { timeout: 90000 })), // raw text → structured Markdown
 };
 
 /* ---------------- ANALYTICS (trainer owner / admin) ---------------- */

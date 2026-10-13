@@ -25,8 +25,9 @@ import { batchesApi, coursesApi, usersApi } from '../../api/services';
 import { formatDate, fullName, getErrorMessage, getFieldErrors, toDateInput } from '../../utils/helpers';
 import { required, validate } from '../../utils/validators';
 
-const EMPTY_FORM = { name: '', account: '', description: '', trainer: '', courses: [], startDate: '', endDate: '', status: 'upcoming' };
+const EMPTY_FORM = { name: '', account: '', description: '', channel: 'blended', trainer: '', courses: [], startDate: '', endDate: '', status: 'upcoming' };
 const STATUSES = ['upcoming', 'ongoing', 'completed'];
+const CHANNELS = [['voice', 'Voice (call only)'], ['non_voice', 'Non-voice (text/chat only)'], ['blended', 'Blended (both)']];
 
 export default function ManageBatches() {
   const toast = useToast();
@@ -76,6 +77,7 @@ export default function ManageBatches() {
         startDate: toDateInput(data.startDate),
         endDate: toDateInput(data.endDate),
         status: data.status,
+        channel: data.channel || 'blended',
       });
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -266,6 +268,13 @@ export default function ManageBatches() {
                     </option>
                   ))}
                 </Form.Select>
+              </Col>
+              <Col md={6} className="mb-3">
+                <Form.Label htmlFor="channel">Call Simulator channel</Form.Label>
+                <Form.Select id="channel" name="channel" value={form.channel} onChange={onChange}>
+                  {CHANNELS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+                </Form.Select>
+                <Form.Text>Voice → call only · Non-voice → text only · Blended → both.</Form.Text>
               </Col>
               <Col md={6} className="mb-3">
                 <Form.Label htmlFor="startDate">Start date</Form.Label>

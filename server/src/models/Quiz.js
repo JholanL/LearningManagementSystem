@@ -14,6 +14,8 @@ const questionSchema = new mongoose.Schema({
 const quizSchema = new mongoose.Schema(
   {
     course: { type: mongoose.Schema.Types.ObjectId, ref: 'Course', required: true, index: true },
+    // Optional: the lesson this quiz follows. null = course-level ("final") quiz shown at the end.
+    lesson: { type: mongoose.Schema.Types.ObjectId, ref: 'Lesson', default: null, index: true },
     title: { type: String, required: true, trim: true, maxlength: 150 },
     description: { type: String, trim: true, maxlength: 1000 },
     timeLimitMinutes: { type: Number, default: 0, min: 0 }, // 0 = no time limit
@@ -34,6 +36,7 @@ quizSchema.methods.toAgentView = function () {
   return {
     _id: this._id,
     course: this.course,
+    lesson: this.lesson,
     title: this.title,
     description: this.description,
     timeLimitMinutes: this.timeLimitMinutes,

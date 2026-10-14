@@ -1,7 +1,8 @@
 /**
  * Agent → Course outline (/agent/courses/:id).
- * Progress header, lessons (with check marks), quizzes (best score + attempts) and the
- * certificate once every lesson is done and every quiz is passed.
+ * Shows the course as ONE ordered path: Lesson 1 → its quiz → Lesson 2 → its quiz
+ * → … → final quiz(zes). Each step unlocks only when the previous one is done
+ * (lesson completed / quiz passed). The API enforces the same order.
  */
 import { Link, useParams } from 'react-router-dom';
 import { Button, Card, Col, ListGroup, ProgressBar, Row } from 'react-bootstrap';
@@ -19,13 +20,17 @@ const BACK = (
   </Button>
 );
 
-// The next thing the agent should do: first unfinished lesson, then first unpassed quiz they can still take.
-function nextStep(course) {
-  const lesson = course.lessons.find((l) => !l.completed);
-  if (lesson) return { to: `/agent/lessons/${lesson._id}`, label: `Continue: ${lesson.title}` };
-  const quiz = course.quizzes.find((q) => !q.passed && q.attemptsUsed < course.maxAttempts);
-  if (quiz) return { to: `/agent/quizzes/${quiz._id}`, label: `Take quiz: ${quiz.title}` };
-  return null;
+// Interleave lessons with their quizzes, then course-level (final) quizzes at the end.
+function buildSteps(course) {
+  const steps = [];
+  (course.lessons || []).forEach((l) => {
+    steps.push({ kind: 'lesson', item: l });
+    (course.quizzes || [])
+      .filter((q) => q.lesson && String(q.lesson) === String(l._id))
+      .forEach((q) => steps.push({ kind: 'quiz', item: q }));
+  });
+  (course.quizzes || []).filter((q) => !q.lesson).forEach((q) => steps.push({ kind: 'quiz', item: q, final: true }));
+  return steps;
 }
 
 export default function CourseView() {
@@ -39,19 +44,20 @@ export default function CourseView() {
         icon="bi-journal-x"
         title="Course not available"
         message={error}
-        action={
-          <div className="d-flex gap-2 justify-content-center">
-            <Button onClick={reload}>Retry</Button>
-            {BACK}
-          </div>
-        }
+        action={<div className="d-flex gap-2 justify-content-center"><Button onClick={reload}>Retry</Button>{BACK}</div>}
       />
     );
   }
 
   const course = data.data;
   const progress = course.progress || { percent: 0, status: 'not_started', completedLessons: 0, totalLessons: 0, passedQuizzes: 0, totalQuizzes: 0 };
-  const next = nextStep(course);
+  const steps = buildSteps(course);
+  const isDone = (s) => (s.kind === 'lesson' ? !!s.item.completed : !!s.item.passed);
+  const firstNotDone = steps.findIndex((s) => !isDone(s));
+  const current = firstNotDone === -1 ? null : steps[firstNotDone];
+  const currentTo = current
+    ? (current.kind === 'lesson' ? `/agent/lessons/${current.item._id}` : `/agent/quizzes/${current.item._id}`)
+    : null;
 
   return (
     <>
@@ -69,33 +75,26 @@ export default function CourseView() {
                 </span>
                 <span className="ms-auto fw-semibold">{progress.percent}%</span>
               </div>
-              <ProgressBar
-                now={progress.percent}
-                variant={progress.status === 'completed' ? 'success' : undefined}
-                style={{ height: 10 }}
-                aria-label="Course progress"
-              />
+              <ProgressBar now={progress.percent} variant={progress.status === 'completed' ? 'success' : undefined} style={{ height: 10 }} aria-label="Course progress" />
               <p className="small text-muted mb-0 mt-3">{course.description}</p>
             </Col>
             <Col lg={4} className="text-lg-end">
-              {next ? (
+              {currentTo ? (
                 <div className="d-grid d-lg-block">
-                  <Button as={Link} to={next.to} className="text-truncate" style={{ maxWidth: '100%' }}>
-                    {next.label} <i className="bi bi-arrow-right ms-1" />
+                  <Button as={Link} to={currentTo} className="text-truncate" style={{ maxWidth: '100%' }}>
+                    {current.kind === 'lesson' ? 'Continue' : 'Take quiz'}: {current.item.title} <i className="bi bi-arrow-right ms-1" />
                   </Button>
                 </div>
               ) : progress.status === 'completed' ? (
                 <span className="text-success fw-semibold"><i className="bi bi-check-circle-fill me-1" /> Course completed</span>
               ) : null}
-              <div className="small text-muted mt-2">
-                Pass mark {course.passingScore}% · {course.maxAttempts} attempts per quiz
-              </div>
+              <div className="small text-muted mt-2">Pass mark {course.passingScore}% · {course.maxAttempts} attempts per quiz</div>
             </Col>
           </Row>
         </Card.Body>
       </Card>
 
-      {/* Certificate (issued automatically by the API when the course is completed) */}
+      {/* Certificate */}
       {course.certificate && (
         <Card className="mb-3 border-success">
           <Card.Body className="d-flex flex-wrap align-items-center gap-3">
@@ -108,98 +107,65 @@ export default function CourseView() {
               </div>
             </div>
             <div className="d-flex flex-wrap gap-2">
-              <Button as={Link} to="/agent/certificates" size="sm">
-                <i className="bi bi-download me-1" /> Download PDF
-              </Button>
-              <Button as={Link} to={`/verify/${course.certificate.code}`} size="sm" variant="outline-primary" target="_blank" rel="noopener noreferrer">
-                <i className="bi bi-patch-check me-1" /> Verify
-              </Button>
+              <Button as={Link} to="/agent/certificates" size="sm"><i className="bi bi-download me-1" /> Download PDF</Button>
+              <Button as={Link} to={`/verify/${course.certificate.code}`} size="sm" variant="outline-primary" target="_blank" rel="noopener noreferrer"><i className="bi bi-patch-check me-1" /> Verify</Button>
             </div>
           </Card.Body>
         </Card>
       )}
 
-      <Row className="g-3">
-        {/* Lessons */}
-        <Col lg={7}>
-          <Card className="h-100">
-            <Card.Header><i className="bi bi-file-text me-1" /> Lessons</Card.Header>
-            {course.lessons.length === 0 ? (
-              <Card.Body>
-                <EmptyState icon="bi-file-text" title="No lessons yet" message="Your trainer hasn't added lessons to this course." />
-              </Card.Body>
-            ) : (
-              <ListGroup variant="flush">
-                {course.lessons.map((l, i) => (
-                  <ListGroup.Item key={l._id} action as={Link} to={`/agent/lessons/${l._id}`} className="d-flex align-items-center gap-3 py-3">
-                    <span className={`fs-5 ${l.completed ? 'text-success' : 'text-muted'}`} aria-label={l.completed ? 'Completed' : 'Not completed'}>
-                      <i className={`bi ${l.completed ? 'bi-check-circle-fill' : 'bi-circle'}`} />
-                    </span>
-                    <div className="flex-grow-1 min-w-0">
-                      <div className="fw-semibold text-truncate">{i + 1}. {l.title}</div>
-                      <div className="small text-muted">
-                        {l.videoUrl && <><i className="bi bi-play-btn me-1" />Video · </>}
-                        {l.durationMinutes ? `${l.durationMinutes} min` : 'Reading'}
-                      </div>
-                    </div>
-                    <i className="bi bi-chevron-right text-muted" />
-                  </ListGroup.Item>
-                ))}
-              </ListGroup>
-            )}
-          </Card>
-        </Col>
+      {/* Course path */}
+      <Card>
+        <Card.Header><i className="bi bi-signpost-split me-1" /> Course path</Card.Header>
+        {steps.length === 0 ? (
+          <Card.Body><EmptyState icon="bi-journal-text" title="Nothing here yet" message="Your trainer hasn't added lessons or quizzes to this course." /></Card.Body>
+        ) : (
+          <ListGroup variant="flush">
+            {steps.map((s, i) => {
+              const done = isDone(s);
+              const locked = firstNotDone !== -1 && i > firstNotDone;
+              const to = s.kind === 'lesson' ? `/agent/lessons/${s.item._id}` : `/agent/quizzes/${s.item._id}`;
+              const attemptsLeft = s.kind === 'quiz' ? Math.max(course.maxAttempts - (s.item.attemptsUsed || 0), 0) : 0;
+              const lockedOut = s.kind === 'quiz' && !s.item.passed && attemptsLeft === 0 && (s.item.attemptsUsed || 0) > 0;
 
-        {/* Quizzes */}
-        <Col lg={5}>
-          <Card className="h-100">
-            <Card.Header><i className="bi bi-patch-question me-1" /> Quizzes</Card.Header>
-            {course.quizzes.length === 0 ? (
-              <Card.Body>
-                <EmptyState icon="bi-patch-question" title="No quizzes yet" message="Your trainer hasn't added quizzes to this course." />
-              </Card.Body>
-            ) : (
-              <ListGroup variant="flush">
-                {course.quizzes.map((q) => {
-                  const attemptsLeft = Math.max(course.maxAttempts - q.attemptsUsed, 0);
-                  const lockedOut = !q.passed && attemptsLeft === 0;
-                  return (
-                    <ListGroup.Item key={q._id} className="py-3">
-                      <div className="d-flex align-items-start gap-2 mb-1">
-                        <div className="fw-semibold flex-grow-1">{q.title}</div>
-                        {q.passed ? (
-                          <StatusBadge status="passed" />
-                        ) : q.attemptsUsed > 0 ? (
-                          <StatusBadge status="failed" label={lockedOut ? 'Failed' : 'Not passed yet'} />
-                        ) : null}
-                      </div>
-                      <div className="small text-muted mb-2">
-                        {q.questionCount} questions
-                        {q.timeLimitMinutes ? ` · ${q.timeLimitMinutes} min` : ''}
-                        {' · '}attempts {q.attemptsUsed}/{course.maxAttempts}
-                        {q.bestScore != null && <> · best <span className="fw-semibold">{q.bestScore}%</span></>}
-                      </div>
-                      {lockedOut ? (
-                        <div className="small text-danger">
-                          <i className="bi bi-lock me-1" /> No attempts left. Talk to your trainer.
-                        </div>
-                      ) : q.passed ? (
-                        <Button as={Link} to={`/agent/quizzes/${q._id}`} size="sm" variant="outline-primary">
-                          View results
-                        </Button>
-                      ) : (
-                        <Button as={Link} to={`/agent/quizzes/${q._id}`} size="sm">
-                          {q.attemptsUsed > 0 ? `Retake (${attemptsLeft} left)` : 'Start quiz'}
-                        </Button>
-                      )}
-                    </ListGroup.Item>
-                  );
-                })}
-              </ListGroup>
-            )}
-          </Card>
-        </Col>
-      </Row>
+              const icon = s.kind === 'lesson'
+                ? (done ? 'bi-check-circle-fill text-success' : locked ? 'bi-lock text-muted' : 'bi-play-circle text-primary')
+                : (s.item.passed ? 'bi-check-circle-fill text-success' : locked ? 'bi-lock text-muted' : 'bi-patch-question text-primary');
+
+              const label = s.kind === 'lesson'
+                ? `Lesson ${s.item.order}: ${s.item.title}`
+                : `${s.final ? 'Final quiz' : 'Quiz'}: ${s.item.title}`;
+
+              const meta = s.kind === 'lesson'
+                ? <>{s.item.videoUrl && <><i className="bi bi-play-btn me-1" />Video · </>}{s.item.durationMinutes ? `${s.item.durationMinutes} min` : 'Reading'}{locked && <> · Locked</>}</>
+                : <>{s.item.questionCount} questions{s.item.timeLimitMinutes ? ` · ${s.item.timeLimitMinutes} min` : ''} · attempts {s.item.attemptsUsed || 0}/{course.maxAttempts}{s.item.bestScore != null && <> · best {s.item.bestScore}%</>}{locked && <> · Locked</>}</>;
+
+              const body = (
+                <>
+                  <span className="fs-5"><i className={`bi ${icon}`} /></span>
+                  <div className="flex-grow-1 min-w-0">
+                    <div className={`fw-semibold text-truncate ${locked ? 'text-muted' : ''}`}>{label}</div>
+                    <div className="small text-muted">{meta}</div>
+                  </div>
+                  {s.kind === 'quiz' && s.item.passed && <StatusBadge status="passed" />}
+                  {lockedOut && <span className="small text-danger text-nowrap"><i className="bi bi-lock me-1" />No attempts left</span>}
+                </>
+              );
+
+              return locked || lockedOut ? (
+                <ListGroup.Item key={`${s.kind}-${s.item._id}`} className="d-flex align-items-center gap-3 py-3 opacity-75" title={locked ? 'Finish the previous step to unlock' : undefined}>
+                  {body}
+                </ListGroup.Item>
+              ) : (
+                <ListGroup.Item key={`${s.kind}-${s.item._id}`} action as={Link} to={to} className="d-flex align-items-center gap-3 py-3">
+                  {body}
+                  <i className="bi bi-chevron-right text-muted" />
+                </ListGroup.Item>
+              );
+            })}
+          </ListGroup>
+        )}
+      </Card>
     </>
   );
 }

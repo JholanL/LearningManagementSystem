@@ -5,6 +5,7 @@
  * List + filters + modal editor (tags chips, body preview, related courses).
  */
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Badge, Button, Card, Col, Form, Modal, Nav, Row, Spinner, Table } from 'react-bootstrap';
 import PageHeader from '../../components/PageHeader';
 import SearchBar from '../../components/SearchBar';
@@ -27,6 +28,14 @@ export default function ManageKnowledgeBase() {
   const toast = useToast();
   const { user } = useAuth();
   const list = usePaginatedList(kbApi.list, { category: '', status: '', tag: '' });
+  const [searchParams] = useSearchParams();
+  const initialSearch = searchParams.get('search') || '';
+
+  useEffect(() => {
+    if (initialSearch) list.setSearch(initialSearch);
+    // Apply a topbar-search deep link once when the page opens.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialSearch]);
 
   const [courses, setCourses] = useState([]);
   useEffect(() => {

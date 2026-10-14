@@ -7,7 +7,7 @@
  * The time limit is enforced client-side only (documented limitation).
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Alert, Button, Card, Col, Form, ProgressBar, Row, Spinner, Table } from 'react-bootstrap';
 import PageHeader from '../../components/PageHeader';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -26,6 +26,7 @@ const formatClock = (seconds) => {
 
 export default function TakeQuiz() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const toast = useToast();
   const { data, loading, error, reload } = useFetch(() => quizzesApi.get(id), [id]);
   const history = useFetch(() => quizzesApi.attempts(id, { limit: 10 }), [id]);
@@ -361,7 +362,12 @@ export default function TakeQuiz() {
                 <i className="bi bi-arrow-repeat me-1" /> Try again
               </Button>
             )}
-            <Button variant={r.passed ? 'primary' : 'light'} as={Link} to={courseUrl}>
+            {r.passed && r.next && (r.next.type === 'lesson' || r.next.type === 'quiz') && (
+              <Button onClick={() => navigate(r.next.type === 'lesson' ? `/agent/lessons/${r.next.id}` : `/agent/quizzes/${r.next.id}`)}>
+                {r.next.type === 'lesson' ? 'Next lesson' : 'Next quiz'} <i className="bi bi-arrow-right ms-1" />
+              </Button>
+            )}
+            <Button variant={r.passed && !(r.next && r.next.type !== 'course') ? 'primary' : 'light'} as={Link} to={courseUrl}>
               Back to course
             </Button>
           </div>
